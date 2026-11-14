@@ -135,7 +135,7 @@ function boardData() {
 }
 const trusted = r => r.source === "robot" || r.source === "photo" || r.ups >= 2;
 const isDeal = r => Number(r.per_unit) * S.settings.deal_pack <= S.settings.deal_price + 0.001;
-const sourceBadge = r => r.source === "robot" ? "🤖 Robot" : r.source === "photo" ? "📸 " + esc(r.nickname || "someone") : "👤 " + esc(r.nickname || "someone");
+const sourceBadge = r => r.source === "robot" ? "🤖 Robot (online price)" : r.source === "photo" ? "📸 " + esc(r.nickname || "someone") : "👤 " + esc(r.nickname || "someone");
 
 // ---------- drawing the screen ----------
 function render() {
