@@ -1,0 +1,78 @@
+:root{
+  --bg:#0e2a2b; --card:#163a3b; --card2:#1d4a4b; --ink:#f4f1e6; --mute:#a9c2bf;
+  --gold:#f2c14e; --sea:#5fd3c3; --bad:#ff7a6b; --line:rgba(255,255,255,.09);
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 Inter,system-ui,-apple-system,sans-serif}
+body{background-image:radial-gradient(1200px 500px at 50% -200px,#1f5a57 0,transparent 70%);min-height:100vh}
+.wrap{max-width:520px;margin:0 auto;padding:calc(16px + env(safe-area-inset-top)) 16px calc(110px + env(safe-area-inset-bottom))}
+header{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+h1{font:800 30px/1 'Bricolage Grotesque',sans-serif;margin:6px 0 4px;letter-spacing:-.5px}
+h1 span{color:var(--gold)}
+h2{font:700 17px 'Bricolage Grotesque',sans-serif;margin:0}
+h3{font:800 22px 'Bricolage Grotesque',sans-serif;margin:0 0 6px}
+.sub{color:var(--mute);margin:0 0 14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:16px}
+.subcard{background:var(--card2);border-radius:14px;padding:4px 12px 12px;margin-top:8px}
+.tipcard{margin-bottom:14px;font-size:14px}
+.tipcard b:first-child{display:block;font-size:15px;margin-bottom:4px}
+.rowhead{display:flex;justify-content:space-between;align-items:center;margin:24px 0 10px}
+.mini{display:flex;gap:6px;align-items:center;color:var(--mute);font-size:13px}
+.mini input{width:20px;height:20px;padding:0;accent-color:var(--sea);appearance:auto;-webkit-appearance:checkbox}
+
+.winner{background:linear-gradient(135deg,#f2c14e,#e9a83a);color:#2a1d00;border:none;position:relative;overflow:hidden}
+.winner .tag{font:700 12px Inter;letter-spacing:1.2px;text-transform:uppercase;opacity:.75}
+.winner .store{font:800 24px/1.1 'Bricolage Grotesque',sans-serif;margin:6px 0 2px}
+.winner .big{font:800 44px/1 'Bricolage Grotesque',sans-serif;margin:10px 0 2px}
+.winner .big small{font-size:16px;font-weight:600}
+.winner .bubbles{position:absolute;right:-20px;top:-20px;width:130px;height:130px;border-radius:50%;background:rgba(255,255,255,.18)}
+.winner a.btn{background:#2a1d00;color:var(--gold)}
+.dealbox{background:linear-gradient(135deg,#5fd3c3,#3fb3a3);color:#06302b;border:none;margin-bottom:12px;font-weight:600}
+.dealbox b{font:800 20px 'Bricolage Grotesque';display:block}
+.empty{color:var(--mute);text-align:center;padding:24px 16px}
+.empty b{color:var(--ink);display:block;font:700 18px 'Bricolage Grotesque';margin-bottom:4px}
+
+.list{display:flex;flex-direction:column;gap:10px}
+.item{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:12px 14px}
+.item .top{display:flex;gap:12px;align-items:center}
+.rank{width:30px;height:30px;border-radius:50%;background:var(--card2);display:grid;place-items:center;font:700 14px 'Bricolage Grotesque';flex:none}
+.item.first .rank{background:var(--gold);color:#2a1d00}
+.mid{flex:1;min-width:0}
+.nm{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dt{color:var(--mute);font-size:13px}
+.pr{text-align:right;flex:none}
+.pr b{font:700 18px 'Bricolage Grotesque';display:block}
+.pr span{color:var(--mute);font-size:12px}
+.actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;padding-top:10px;border-top:1px solid var(--line)}
+.chip{background:var(--card2);color:var(--ink);border:1px solid var(--line);border-radius:999px;padding:6px 11px;font:600 13px Inter;text-decoration:none;cursor:pointer}
+.chip.on{background:var(--sea);color:#06302b}
+.chip.danger{color:var(--bad)}
+.noprice .pr b{color:var(--mute);font-size:14px}
+
+label{display:block;font-size:13px;color:var(--mute);margin:12px 0 5px;font-weight:500}
+input,select{width:100%;font:16px Inter;color:var(--ink);background:var(--card2);border:1px solid var(--line);border-radius:12px;padding:12px;appearance:none;-webkit-appearance:none}
+input[type=file]{padding:10px;font-size:14px}
+input:focus,select:focus{outline:2px solid var(--sea);outline-offset:0}
+#productPick{margin-bottom:12px}
+.row{display:flex;gap:10px}.row>div{flex:1}
+button,a.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;font:600 15px Inter;border:none;border-radius:12px;padding:12px 16px;cursor:pointer;text-decoration:none}
+.primary{background:var(--sea);color:#06302b;width:100%;margin-top:16px;font-size:16px;padding:14px}
+.primary:disabled{opacity:.5}
+.ghost{background:transparent;color:var(--ink);border:1px solid var(--line);width:100%;margin-top:10px}
+.link{background:none;color:var(--sea);padding:6px 0;font-size:14px}
+.icon{background:var(--card);border:1px solid var(--line);font-size:20px;padding:10px 12px}
+.note{color:var(--mute);font-size:12px;margin-top:6px}
+.warn{background:rgba(242,193,78,.15);color:var(--gold);border-radius:12px;padding:10px 12px;margin-top:12px;font-size:14px}
+.foot{color:var(--mute);font-size:12px;margin-top:22px;text-align:center}
+
+.fab{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(18px + env(safe-area-inset-bottom));background:var(--gold);color:#2a1d00;font:700 17px Inter;padding:16px 26px;border-radius:999px;box-shadow:0 10px 30px rgba(0,0,0,.35);z-index:5}
+
+.sheet{position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:flex-end;justify-content:center;z-index:10}
+.panel{background:var(--bg);border:1px solid var(--line);border-radius:22px 22px 0 0;width:100%;max-width:520px;max-height:92vh;overflow:auto;padding:22px 18px calc(22px + env(safe-area-inset-bottom));position:relative}
+.panel p{color:var(--mute);margin:0 0 8px}
+.close{position:absolute;right:12px;top:12px;background:var(--card);color:var(--mute);padding:6px 10px;font-size:16px}
+
+.toast{position:fixed;left:50%;top:calc(16px + env(safe-area-inset-top));transform:translateX(-50%) translateY(-150px);background:var(--ink);color:var(--bg);padding:12px 18px;border-radius:14px;font-weight:600;transition:.3s;z-index:20;max-width:90vw;text-align:center}
+.toast.show{transform:translateX(-50%) translateY(0)}
+.hide{display:none!important}
+.tagline{color:var(--gold);font-weight:600;font-size:14px;margin:0 0 4px}
