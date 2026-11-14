@@ -1,0 +1,450 @@
+// =====================================================================
+//  BOTTLO SCOUT – VERSION 2 APP
+//  You shouldn't need to change anything in here. Your keys go in config.js.
+// =====================================================================
+import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js";
+
+const $ = id => document.getElementById(id);
+const JACOBS_WELL = { lat: -27.7810, lng: 153.3655 };
+const FADE_DAYS = 7;
+const ROAD_FACTOR = 1.3;              // roads are roughly 30% longer than a straight line
+const PACKS = { 1: "single", 6: "6 pack", 10: "10 pack", 24: "24 block", 30: "30 block" };
+
+if (!SUPABASE_URL || SUPABASE_URL.includes("PASTE")) {
+  document.querySelector(".wrap").innerHTML =
+    `<div class="card empty" style="margin-top:40px"><b>Almost there!</b>Open <code>config.js</code> and paste in your Supabase URL and anon key.</div>`;
+  throw new Error("config.js not filled in");
+}
+const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// ---------- state ----------
+const S = {
+  user: null, profile: null,
+  settings: { radius_km: 15, deal_price: 55, deal_pack: 30, fuel_per_km: 0.20 },
+  pos: { ...JACOBS_WELL, gps: false },
+  products: [], productId: null, stores: [], rows: [], myVotes: {},
+  dealsSeen: new Set(),
+};
+
+// ---------- little helpers ----------
+const money = n => "$" + Number(n).toFixed(2);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+const packName = n => PACKS[n] || n + " pack";
+const local = {
+  get(k, d) { try { const v = localStorage.getItem("cf." + k); return v === null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem("cf." + k, JSON.stringify(v)); } catch {} },
+};
+function toast(msg) {
+  const t = $("toast"); t.textContent = msg; t.classList.add("show");
+  clearTimeout(toast.h); toast.h = setTimeout(() => t.classList.remove("show"), 2600);
+}
+function open(id) { $(id).classList.remove("hide"); }
+function close(id) { $(id).classList.add("hide"); }
+document.querySelectorAll("[data-close]").forEach(b => b.addEventListener("click", () => b.closest(".sheet").classList.add("hide")));
+document.querySelectorAll(".sheet").forEach(s => s.addEventListener("click", e => { if (e.target === s && s.id !== "sheetAge" && s.id !== "sheetNick") s.classList.add("hide"); }));
+
+function km(a, b) {
+  const R = 6371, r = x => x * Math.PI / 180;
+  const dLat = r(b.lat - a.lat), dLng = r(b.lng - a.lng);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(r(a.lat)) * Math.cos(r(b.lat)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+function ago(t) {
+  const m = Math.round((Date.now() - new Date(t)) / 60000);
+  if (m < 60) return m <= 1 ? "just now" : m + " min ago";
+  const h = Math.round(m / 60); if (h < 24) return h + " hr ago";
+  const d = Math.round(h / 24); return d === 1 ? "yesterday" : d + " days ago";
+}
+const mapsLink = s => `https://maps.apple.com/?daddr=${s.lat},${s.lng}&q=${encodeURIComponent(s.name)}`;
+const photoUrl = p => sb.storage.from("price-photos").getPublicUrl(p).data.publicUrl;
+
+// ---------- location ----------
+function locate() {
+  if (!navigator.geolocation) return useHome();
+  navigator.geolocation.getCurrentPosition(
+    p => { S.pos = { lat: p.coords.latitude, lng: p.coords.longitude, gps: true }; $("where").textContent = "📍 Using your location"; render(); },
+    () => useHome(),
+    { enableHighAccuracy: true, timeout: 10000, maximumAge: 120000 }
+  );
+}
+function useHome() {
+  const s = S.settings;
+  S.pos = { lat: s.home_lat ?? JACOBS_WELL.lat, lng: s.home_lng ?? JACOBS_WELL.lng, gps: false };
+  $("where").textContent = "🏠 Using home (Jacobs Well). Allow location for live GPS.";
+  render();
+}
+
+// ---------- loading data ----------
+async function loadStatic() {
+  const [p, s] = await Promise.all([
+    sb.from("products").select("*").order("id"),
+    sb.from("stores").select("*").order("name"),
+  ]);
+  if (p.error || s.error) { toast("Couldn't reach the Brain. Check your internet."); return; }
+  S.products = p.data; S.stores = s.data;
+  S.productId = S.productId ?? local.get("product", S.products[0]?.id);
+  if (!S.products.find(x => x.id === S.productId)) S.productId = S.products[0]?.id;
+  const pick = $("productPick");
+  pick.innerHTML = S.products.map(x => `<option value="${x.id}">${esc(x.name)}</option>`).join("");
+  pick.value = S.productId;
+  pick.classList.toggle("hide", S.products.length < 2);
+}
+
+async function loadPrices() {
+  if (!S.productId) return;
+  const since = new Date(Date.now() - FADE_DAYS * 86400000).toISOString();
+  const { data, error } = await sb.from("price_board").select("*")
+    .eq("product_id", S.productId).gte("last_confirmed", since).order("added_at", { ascending: false });
+  if (error) { toast("Couldn't load prices"); console.error(error); return; }
+  S.rows = data.map(r => ({ ...r, price: +r.price, per_unit: +r.per_unit, ups: +r.ups, downs: +r.downs }));
+  S.myVotes = {};
+  if (S.user && data.length) {
+    const { data: v } = await sb.from("votes").select("price_id,vote").eq("user_id", S.user.id).in("price_id", data.map(r => r.id));
+    (v || []).forEach(x => S.myVotes[x.price_id] = x.vote);
+  }
+  render();
+}
+let reloadTimer;
+const reloadSoon = () => { clearTimeout(reloadTimer); reloadTimer = setTimeout(loadPrices, 400); };
+
+// ---------- the brains of the leaderboard ----------
+function boardData() {
+  const st = S.settings, useFuel = $("fuel").checked;
+  // throw out prices lots of people say are wrong
+  const ok = S.rows.filter(r => !(r.downs >= 3 && r.downs > r.ups));
+  // for each shop + pack size, only the newest price counts (if it went up, the old cheap one is gone)
+  const latest = new Map();
+  for (const r of ok) { const k = r.store_id + ":" + r.pack_size; if (!latest.has(k)) latest.set(k, r); }
+  const byStore = new Map();
+  for (const r of latest.values()) {
+    const cur = byStore.get(r.store_id);
+    if (!cur || r.per_unit < cur.per_unit) byStore.set(r.store_id, r);
+  }
+  return S.stores.map(s => {
+    const dist = km(S.pos, s);
+    const best = byStore.get(s.id) || null;
+    let score = Infinity;
+    if (best) {
+      score = Number(best.per_unit);
+      if (useFuel) score += (dist * ROAD_FACTOR * 2 * st.fuel_per_km) / st.deal_pack;
+    }
+    return { store: s, dist, best, score };
+  }).filter(x => x.dist <= st.radius_km)
+    .sort((a, b) => a.score - b.score || a.dist - b.dist);
+}
+const trusted = r => r.source === "robot" || r.source === "photo" || r.ups >= 2;
+const isDeal = r => Number(r.per_unit) * S.settings.deal_pack <= S.settings.deal_price + 0.001;
+const sourceBadge = r => r.source === "robot" ? "🤖 Robot" : r.source === "photo" ? "📸 " + esc(r.nickname || "someone") : "👤 " + esc(r.nickname || "someone");
+
+// ---------- drawing the screen ----------
+function render() {
+  $("radiusLbl").textContent = S.settings.radius_km;
+  const board = boardData();
+  const priced = board.filter(b => b.best);
+  const st = S.settings;
+
+  // 🔔 deal banner
+  const deals = priced.filter(b => isDeal(b.best));
+  $("deal").innerHTML = deals.length ? `<div class="card dealbox"><b>🔔 Deal alert!</b>
+    ${esc(deals[0].store.name)} works out at ${money(deals[0].best.per_unit * st.deal_pack)} for a ${packName(st.deal_pack)}. That's under your ${money(st.deal_price)} target!</div>` : "";
+  deals.forEach(d => notifyDeal(d));
+
+  // 🏆 winner
+  if (!priced.length) {
+    $("winner").innerHTML = `<div class="card empty"><b>No prices yet 🍺</b>Be the first! Tap <b>Add a price</b> when you spot it in a bottlo.</div>`;
+  } else {
+    const w = priced[0], r = w.best;
+    const next = priced[1];
+    let tip = "";
+    if (w.store.chain !== "Dan Murphy's" && board.some(b => b.store.chain === "Dan Murphy's"))
+      tip = `<div class="note" style="color:#2a1d00;opacity:.8;margin-top:12px">💡 Dan Murphy's says it beats a cheaper advertised price on the same product. Show them this price at Dan's.</div>`;
+    else if (next)
+      tip = `<div class="note" style="color:#2a1d00;opacity:.8;margin-top:12px">Saves you ${money((next.best.per_unit - r.per_unit) * st.deal_pack)} on a ${packName(st.deal_pack)} compared with ${esc(next.store.name)}.</div>`;
+    $("winner").innerHTML = `<div class="card winner"><div class="bubbles"></div>
+      <div class="tag">🏆 Cheapest near you ${trusted(r) ? "· ✅ trusted" : ""}</div>
+      <div class="store">${esc(w.store.name)}</div>
+      <div>~${w.dist.toFixed(1)} km away · ${sourceBadge(r)} · ${ago(r.added_at)}</div>
+      <div class="big">${money(r.per_unit)} <small>per can</small></div>
+      <div>${money(r.price)} for a ${packName(r.pack_size)}${r.pack_size !== st.deal_pack ? ` · about ${money(r.per_unit * st.deal_pack)} for a ${packName(st.deal_pack)}` : ""}</div>
+      <div style="margin-top:14px"><a class="btn" href="${mapsLink(w.store)}">📍 Take me there</a></div>${tip}</div>`;
+  }
+
+  // 📋 list
+  $("list").innerHTML = board.length ? board.map((b, i) => itemHtml(b, i)).join("")
+    : `<div class="card empty"><b>No shops in range</b>Make your search radius bigger in ⚙️ Settings.</div>`;
+}
+
+function itemHtml(b, i) {
+  const s = b.store, r = b.best;
+  if (!r) return `<div class="item noprice"><div class="top">
+      <div class="rank">–</div>
+      <div class="mid"><div class="nm">${esc(s.name)}</div><div class="dt">~${b.dist.toFixed(1)} km · no price yet${s.robot_readable ? " · 🤖 Robot will check" : ""}</div></div>
+      <div class="pr"><b>?</b></div></div>
+      <div class="actions"><button class="chip" data-add="${s.id}">＋ Add price</button><a class="chip" href="${mapsLink(s)}">📍 Map</a></div></div>`;
+  const mine = S.user && r.added_by === S.user.id;
+  const my = S.myVotes[r.id] || 0;
+  const fuelTxt = $("fuel").checked ? ` · ${money(b.score)}/can with petrol` : "";
+  const canDelete = mine || S.profile?.is_admin;
+  const canBan = S.profile?.is_admin && !mine && r.added_by;
+  return `<div class="item ${i === 0 ? "first" : ""}"><div class="top">
+      <div class="rank">${i + 1}</div>
+      <div class="mid">
+        <div class="nm">${esc(s.name)} ${trusted(r) ? "✅" : ""} ${isDeal(r) ? "🔔" : ""}</div>
+        <div class="dt">${money(r.price)} / ${packName(r.pack_size)} · ~${b.dist.toFixed(1)} km${fuelTxt}</div>
+        <div class="dt">${sourceBadge(r)} · ${ago(r.added_at)}</div>
+      </div>
+      <div class="pr"><b>${money(r.per_unit)}</b><span>per can</span></div></div>
+    <div class="actions">
+      ${mine ? "" : `<button class="chip ${my === 1 ? "on" : ""}" data-vote="1" data-id="${r.id}">👍 ${r.ups}</button>
+      <button class="chip ${my === -1 ? "on" : ""}" data-vote="-1" data-id="${r.id}">👎 ${r.downs}</button>`}
+      ${mine ? `<span class="chip">👍 ${r.ups} · 👎 ${r.downs}</span>` : ""}
+      ${r.photo_path ? `<a class="chip" href="${photoUrl(r.photo_path)}">📸 Photo</a>` : ""}
+      <a class="chip" href="${mapsLink(s)}">📍 Map</a>
+      <button class="chip" data-add="${s.id}">＋ New price</button>
+      ${canDelete ? `<button class="chip danger" data-del="${r.id}">🗑</button>` : ""}
+      ${canBan ? `<button class="chip danger" data-ban="${r.added_by}" data-nick="${esc(r.nickname)}">🚫 Ban</button>` : ""}
+    </div></div>`;
+}
+
+// ---------- 🔔 alerts while the app is open (background alerts come in Step 4) ----------
+async function notifyDeal(d) {
+  const key = d.best.id;
+  if (S.dealsSeen.has(key)) return;
+  S.dealsSeen.add(key);
+  const seen = local.get("dealsNotified", []);
+  if (seen.includes(key)) return;
+  local.set("dealsNotified", [...seen.slice(-50), key]);
+  if (!("Notification" in window) || Notification.permission !== "granted") return;
+  try {
+    const reg = await navigator.serviceWorker?.ready;
+    reg?.showNotification("🔔 Bottlo Scout deal!", {
+      body: `${d.store.name}: ${money(d.best.price)} for a ${packName(d.best.pack_size)}`,
+      icon: "icons/icon-192.png", tag: "deal-" + key,
+    });
+  } catch {}
+}
+
+// ---------- signing in ----------
+async function refreshUser() {
+  const { data } = await sb.auth.getSession();
+  S.user = data.session?.user || null;
+  S.profile = null;
+  if (S.user) {
+    const { data: p } = await sb.from("profiles").select("*").eq("id", S.user.id).maybeSingle();
+    S.profile = p;
+    if (!p) { open("sheetNick"); }
+    const { data: st } = await sb.from("settings").select("*").eq("user_id", S.user.id).maybeSingle();
+    if (st) S.settings = { ...S.settings, ...st, radius_km: +st.radius_km, deal_price: +st.deal_price, fuel_per_km: +st.fuel_per_km };
+  } else {
+    S.settings = { ...S.settings, ...local.get("settings", {}) };
+  }
+  $("signInOut").textContent = S.user ? "Sign out" : "Sign in";
+  $("acct").textContent = S.user ? `Signed in as ${S.profile?.nickname || ""} (${S.user.email}) · 🏅 ${S.profile?.points ?? 0} scout points${S.profile?.is_admin ? " · 👑 admin" : ""}${S.profile?.banned ? " · 🚫 blocked from posting" : ""}` : "Not signed in. You can look, but sign in to add prices or vote.";
+}
+function needSignIn() { if (S.user && S.profile) return false; open(S.user ? "sheetNick" : "sheetSignin"); return true; }
+
+async function doAuth(mode) {
+  const email = $("email").value.trim(), password = $("password").value;
+  if (!/^\S+@\S+\.\S+$/.test(email)) return toast("Check your email address");
+  if (password.length < 8) return toast("Password needs at least 8 characters");
+  const btns = [$("signInBtn"), $("signUpBtn")]; btns.forEach(b => b.disabled = true);
+  const { data, error } = mode === "up"
+    ? await sb.auth.signUp({ email, password })
+    : await sb.auth.signInWithPassword({ email, password });
+  btns.forEach(b => b.disabled = false);
+  if (error) {
+    if (/already registered/i.test(error.message)) return toast("You already have an account. Tap Sign in.");
+    if (/invalid login/i.test(error.message)) return toast("Wrong email or password");
+    return toast(error.message);
+  }
+  if (!data.session) return toast("Account made, but email confirmation is still ON in Supabase (see Setup Step 3).");
+  $("password").value = "";
+  close("sheetSignin");
+  await refreshUser(); await loadPrices();
+  if (S.profile) toast("Welcome back, " + S.profile.nickname + "!");
+}
+$("signInBtn").addEventListener("click", () => doAuth("in"));
+$("signUpBtn").addEventListener("click", () => doAuth("up"));
+$("saveNick").addEventListener("click", async () => {
+  const nickname = $("nick").value.trim();
+  if (nickname.length < 2) return toast("At least 2 letters please");
+  const { error } = await sb.from("profiles").insert({ id: S.user.id, nickname });
+  if (error) return toast(error.code === "23505" ? "Someone has that nickname. Try another!" : error.message);
+  await sb.from("settings").upsert({ user_id: S.user.id, ...pickSettings(S.settings) });
+  close("sheetNick");
+  await refreshUser(); render();
+  toast("You're in, " + nickname + "! 🍻");
+});
+
+// ---------- adding a price ----------
+function fillStoreSelect(preselect) {
+  const list = S.stores.map(s => ({ s, d: km(S.pos, s) })).sort((a, b) => a.d - b.d);
+  $("addStore").innerHTML = list.map(({ s, d }) =>
+    `<option value="${s.id}">${d < 0.3 && S.pos.gps ? "📍 You're here: " : ""}${esc(s.name)} (~${d.toFixed(1)} km)</option>`).join("");
+  if (preselect) $("addStore").value = preselect;
+}
+function openAdd(storeId) {
+  if (needSignIn()) return;
+  if (S.profile.banned) return toast("Your account is blocked from posting 🚫");
+  fillStoreSelect(storeId);
+  $("addPrice").value = ""; $("addPhoto").value = "";
+  $("newStore").classList.add("hide"); $("weird").classList.add("hide");
+  open("sheetAdd");
+}
+$("openAdd").addEventListener("click", () => openAdd());
+$("showNewStore").addEventListener("click", () => $("newStore").classList.toggle("hide"));
+
+function looksWeird() {
+  const price = parseFloat($("addPrice").value), pack = +$("addPack").value;
+  if (!(price > 0)) return false;
+  const per = price / pack;
+  return per < 1.2 || per > 4.5;   // Super Crisp is usually somewhere around $1.50–$3 a can
+}
+$("addPrice").addEventListener("input", () => $("weird").classList.toggle("hide", !looksWeird()));
+$("addPack").addEventListener("change", () => $("weird").classList.toggle("hide", !looksWeird()));
+
+async function shrinkPhoto(file) {
+  const img = await createImageBitmap(file);
+  const scale = Math.min(1, 1280 / Math.max(img.width, img.height));
+  const c = document.createElement("canvas");
+  c.width = Math.round(img.width * scale); c.height = Math.round(img.height * scale);
+  c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+  return await new Promise(res => c.toBlob(res, "image/jpeg", 0.7));
+}
+
+$("savePrice").addEventListener("click", async () => {
+  const btn = $("savePrice");
+  const price = parseFloat($("addPrice").value);
+  const pack = +$("addPack").value;
+  const file = $("addPhoto").files[0];
+  if (!(price > 0)) return toast("Type in the price");
+  if (looksWeird() && !file) return toast("That price looks odd. Add a photo of the tag please 📸");
+  btn.disabled = true; btn.textContent = "Sharing…";
+  try {
+    let storeId = +$("addStore").value;
+    // new shop?
+    if (!$("newStore").classList.contains("hide") && $("nsName").value.trim()) {
+      if (!S.pos.gps) throw new Error("Turn on location so we know where the new shop is");
+      const { data, error } = await sb.from("stores").insert({
+        name: $("nsName").value.trim(), suburb: $("nsSuburb").value.trim() || null,
+        chain: "Independent", lat: S.pos.lat, lng: S.pos.lng, added_by: S.user.id,
+      }).select().single();
+      if (error) throw error;
+      storeId = data.id; S.stores.push(data);
+    }
+    let photo_path = null;
+    if (file) {
+      const blob = await shrinkPhoto(file);
+      photo_path = `${S.user.id}/${Date.now()}.jpg`;
+      const up = await sb.storage.from("price-photos").upload(photo_path, blob, { contentType: "image/jpeg" });
+      if (up.error) throw up.error;
+    }
+    const { error } = await sb.from("prices").insert({
+      product_id: S.productId, store_id: storeId, pack_size: pack, price,
+      source: photo_path ? "photo" : "user", photo_path, added_by: S.user.id,
+    });
+    if (error) throw (error.code === "42501" ? new Error("Slow down! Max 10 prices an hour 😅") : error);
+    close("sheetAdd");
+    toast("Shared with everyone! 🍻");
+    loadPrices();
+  } catch (e) {
+    toast(e.message || "Something went wrong");
+  } finally {
+    btn.disabled = false; btn.textContent = "Share with everyone";
+  }
+});
+
+// ---------- votes, delete, ban ----------
+$("list").addEventListener("click", async e => {
+  const t = e.target.closest("button"); if (!t) return;
+  if (t.dataset.add) return openAdd(+t.dataset.add);
+  if (t.dataset.vote) {
+    if (needSignIn()) return;
+    const id = +t.dataset.id, v = +t.dataset.vote;
+    const { error } = S.myVotes[id] === v
+      ? await sb.from("votes").delete().eq("price_id", id).eq("user_id", S.user.id)
+      : await sb.from("votes").upsert({ price_id: id, user_id: S.user.id, vote: v });
+    if (error) return toast(S.profile?.banned ? "Your account is blocked 🚫" : "Couldn't save your vote");
+    toast(S.myVotes[id] === v ? "Vote removed" : v === 1 ? "Thanks for checking! 👍" : "Thanks, flagged 👎");
+    return loadPrices();
+  }
+  if (t.dataset.del) {
+    if (!confirm("Delete this price?")) return;
+    const { error } = await sb.from("prices").delete().eq("id", +t.dataset.del);
+    if (error) return toast("Couldn't delete");
+    toast("Deleted 🗑"); return loadPrices();
+  }
+  if (t.dataset.ban) {
+    if (!confirm(`Ban ${t.dataset.nick}? They won't be able to post or vote.`)) return;
+    const { error } = await sb.rpc("ban_user", { target: t.dataset.ban });
+    toast(error ? "Couldn't ban" : "Banned 🚫");
+  }
+});
+
+// ---------- settings ----------
+const pickSettings = s => ({ radius_km: s.radius_km, deal_price: s.deal_price, deal_pack: s.deal_pack, fuel_per_km: s.fuel_per_km });
+$("openSettings").addEventListener("click", () => {
+  const s = S.settings;
+  $("sNick").value = S.profile?.nickname || ""; $("sNick").disabled = !S.profile;
+  $("sRadius").value = s.radius_km; $("sFuel").value = s.fuel_per_km;
+  $("sDeal").value = s.deal_price; $("sDealPack").value = s.deal_pack;
+  $("alertsBtn").textContent = ("Notification" in window && Notification.permission === "granted") ? "🔔 Deal alerts are on" : "🔔 Turn on deal alerts";
+  open("sheetSettings");
+});
+$("saveSettings").addEventListener("click", async () => {
+  const s = S.settings;
+  s.radius_km = Math.max(1, +$("sRadius").value || 15);
+  s.fuel_per_km = Math.max(0, +$("sFuel").value || 0);
+  s.deal_price = Math.max(0, +$("sDeal").value || 55);
+  s.deal_pack = +$("sDealPack").value;
+  local.set("settings", pickSettings(s));
+  if (S.user && S.profile) {
+    await sb.from("settings").upsert({ user_id: S.user.id, ...pickSettings(s) });
+    const nick = $("sNick").value.trim();
+    if (nick && nick !== S.profile.nickname) {
+      const { error } = await sb.from("profiles").update({ nickname: nick }).eq("id", S.user.id);
+      if (error) toast(error.code === "23505" ? "That nickname is taken" : "Couldn't change nickname");
+      else S.profile.nickname = nick;
+    }
+  }
+  close("sheetSettings"); render(); toast("Saved ✓");
+});
+$("alertsBtn").addEventListener("click", async () => {
+  if (!("Notification" in window)) return toast("On iPhone: add Bottlo Scout to your Home Screen first, then open it from there.");
+  const p = await Notification.requestPermission();
+  toast(p === "granted" ? "Alerts on! 🔔" : "Alerts are off. You can change this in iPhone Settings.");
+  $("alertsBtn").textContent = p === "granted" ? "🔔 Deal alerts are on" : "🔔 Turn on deal alerts";
+});
+$("signInOut").addEventListener("click", async () => {
+  close("sheetSettings");
+  if (S.user) { await sb.auth.signOut(); await refreshUser(); render(); toast("Signed out"); }
+  else open("sheetSignin");
+});
+$("fuel").addEventListener("change", () => { local.set("fuel", $("fuel").checked); render(); });
+$("productPick").addEventListener("change", e => { S.productId = +e.target.value; local.set("product", S.productId); loadPrices(); });
+
+// ---------- age check + install tip ----------
+if (!local.get("age18", false)) open("sheetAge");
+$("age18").addEventListener("click", () => { local.set("age18", true); close("sheetAge"); });
+$("ageNo").addEventListener("click", () => { document.body.innerHTML = `<div class="wrap"><div class="card empty" style="margin-top:60px"><b>Sorry!</b>Bottlo Scout is for adults 18 and over.</div></div>`; });
+const standalone = window.matchMedia("(display-mode: standalone)").matches || navigator.standalone;
+if (/iPhone|iPad|iPod/.test(navigator.userAgent) && !standalone && !local.get("tipHidden", false)) $("installTip").classList.remove("hide");
+$("hideTip").addEventListener("click", () => { local.set("tipHidden", true); $("installTip").classList.add("hide"); });
+
+// ---------- start up ----------
+(async function start() {
+  $("fuel").checked = local.get("fuel", false);
+  if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
+  await refreshUser();
+  await loadStatic();
+  useHome();          // show something straight away…
+  locate();           // …then switch to GPS when it's ready
+  await loadPrices();
+  sb.channel("board")
+    .on("postgres_changes", { event: "*", schema: "public", table: "prices" }, reloadSoon)
+    .on("postgres_changes", { event: "*", schema: "public", table: "votes" }, reloadSoon)
+    .subscribe();
+  sb.auth.onAuthStateChange((evt) => { if (evt === "SIGNED_OUT") { S.user = null; S.profile = null; render(); } });
+  setInterval(loadPrices, 5 * 60 * 1000);   // backup refresh every 5 minutes
+})();
