@@ -5,5 +5,5 @@
 //  rules in schema.sql protect your data.
 //  NEVER paste the "service_role" key here.
 // =====================================================================
-export const SUPABASE_URL = "PASTE-YOUR-PROJECT-URL-HERE";
-export const SUPABASE_ANON_KEY = "PASTE-YOUR-ANON-KEY-HERE";
+export const SUPABASE_URL = "https://ukyqctoqtskbxaivxfec.supabase.co";
+export const SUPABASE_ANON_KEY = "sb_publishable_98VLt9AdQRLjuTSpKiuqaA_bmfGrC6G";
