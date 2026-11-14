@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Bottlo Scout</title>
+<meta name="theme-color" content="#0e2a2b">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Bottlo Scout">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Bottlo <span>Scout</span></h1>
+      <p class="tagline">Don’t shop around, Scout around 🔍</p>
+      <p class="sub" id="where">Finding you…</p>
+    </div>
+    <button class="icon" id="openSettings" aria-label="Settings">⚙️</button>
+  </header>
+
+  <div id="installTip" class="card tipcard hide">
+    <b>📲 Make it a real app</b>
+    Tap the <b>Share</b> button in Safari, then <b>Add to Home Screen</b>. You get an icon, and alerts can work.
+    <button class="link" id="hideTip">Got it</button>
+  </div>
+
+  <select id="productPick" class="hide" aria-label="Drink"></select>
+
+  <div id="deal"></div>
+  <div id="winner"></div>
+
+  <div class="rowhead">
+    <h2>Shops within <span id="radiusLbl">15</span> km</h2>
+    <label class="mini"><input type="checkbox" id="fuel"> ⛽ count petrol</label>
+  </div>
+  <div class="list" id="list"><div class="card empty">Loading prices…</div></div>
+
+  <p class="foot">Prices come from 🤖 the Robot, 📸 photos and 👤 people like you. They fade out after 7 days unless someone 👍s them. Distances are straight-line, so roads may be a bit longer.</p>
+</div>
+
+<button class="fab" id="openAdd">＋ Add a price</button>
+
+<!-- Bottom sheets -->
+<div class="sheet hide" id="sheetAge">
+  <div class="panel">
+    <h3>🍺 Are you 18 or older?</h3>
+    <p>Bottlo Scout is about alcohol, so it's for adults only.</p>
+    <button class="primary" id="age18">Yes, I'm 18+</button>
+    <button class="ghost" id="ageNo">No</button>
+  </div>
+</div>
+
+<div class="sheet hide" id="sheetSignin">
+  <div class="panel">
+    <button class="close" data-close>✕</button>
+    <h3>Sign in</h3>
+    <p>Sign in to add prices or vote. New here? Type an email and make up a password, then tap <b>Create account</b>.</p>
+    <label for="email">Email</label>
+    <input id="email" type="email" inputmode="email" autocomplete="email" placeholder="you@example.com">
+    <label for="password">Password (at least 8 characters)</label>
+    <input id="password" type="password" autocomplete="current-password" placeholder="••••••••">
+    <button class="primary" id="signInBtn">Sign in</button>
+    <button class="ghost" id="signUpBtn">Create account</button>
+  </div>
+</div>
+
+<div class="sheet hide" id="sheetNick">
+  <div class="panel">
+    <h3>Pick a nickname</h3>
+    <p>Other users see this next to the prices you add. Don't use your real name.</p>
+    <input id="nick" maxlength="20" placeholder="e.g. ScoutKing">
+    <button class="primary" id="saveNick">Let's go</button>
+  </div>
+</div>
+
+<div class="sheet hide" id="sheetAdd">
+  <div class="panel">
+    <button class="close" data-close>✕</button>
+    <h3>Add a price</h3>
+    <label for="addStore">Shop</label>
+    <select id="addStore"></select>
+    <button class="link" id="showNewStore">Shop not listed? Add it</button>
+    <div id="newStore" class="hide subcard">
+      <label for="nsName">Shop name</label>
+      <input id="nsName" placeholder="e.g. Bottlemart Pimpama">
+      <label for="nsSuburb">Suburb</label>
+      <input id="nsSuburb" placeholder="e.g. Pimpama">
+      <p class="note">We'll put it on the map where you're standing right now, so add it while you're at the shop.</p>
+    </div>
+    <div class="row">
+      <div>
+        <label for="addPack">Pack</label>
+        <select id="addPack">
+          <option value="1">Single</option><option value="6">6 pack</option>
+          <option value="10">10 pack</option><option value="24">24 block</option>
+          <option value="30" selected>30 block</option>
+        </select>
+      </div>
+      <div>
+        <label for="addPrice">Price ($)</label>
+        <input id="addPrice" type="number" inputmode="decimal" step="0.01" min="0" placeholder="54.99">
+      </div>
+    </div>
+    <label for="addPhoto">Photo of the price tag (optional, gets a ✅)</label>
+    <input id="addPhoto" type="file" accept="image/*" capture="environment">
+    <div id="weird" class="warn hide">🤔 That price looks unusual. Add a photo of the price tag so people trust it.</div>
+    <button class="primary" id="savePrice">Share with everyone</button>
+  </div>
+</div>
+
+<div class="sheet hide" id="sheetSettings">
+  <div class="panel">
+    <button class="close" data-close>✕</button>
+    <h3>Settings</h3>
+    <div id="acct" class="note"></div>
+    <label for="sNick">Nickname</label>
+    <input id="sNick" maxlength="20">
+    <div class="row">
+      <div><label for="sRadius">Search radius (km)</label><input id="sRadius" type="number" inputmode="decimal" min="1" max="100"></div>
+      <div><label for="sFuel">Petrol $ per km</label><input id="sFuel" type="number" inputmode="decimal" step="0.01" min="0"></div>
+    </div>
+    <div class="row">
+      <div><label for="sDeal">Buzz me under ($)</label><input id="sDeal" type="number" inputmode="decimal" step="0.01" min="0"></div>
+      <div><label for="sDealPack">for a</label>
+        <select id="sDealPack"><option value="1">Single</option><option value="6">6 pack</option><option value="10">10 pack</option><option value="24">24 block</option><option value="30">30 block</option></select>
+      </div>
+    </div>
+    <button class="ghost" id="alertsBtn">🔔 Turn on deal alerts</button>
+    <button class="primary" id="saveSettings">Save</button>
+    <button class="ghost" id="signInOut">Sign in</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
