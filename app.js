@@ -15,10 +15,10 @@ const CATS = [
   ["fav", "⭐ Mine"],
 ];
 const CAT_NOTE = {
-  beer: "🏆 Australia's best-selling beers first (2025 sales data), all as 30 blocks.",
+  beer: "🏆 Australia's best-selling beers first (2025 sales data).",
   fav: "Your ⭐ favourites. Tap ⭐ on any drink to add it here.",
 };
-const PACK_CHOICES = { can: [1, 4, 6, 10, 16, 24, 30], bottle: [1, 6, 12] };
+const PACK_CHOICES = { can: [1, 4, 6, 10, 16, 24, 30], bottle: [1, 6, 12], stubby: [1, 6, 24] };
 const CAT_EMOJI = { beer: "🍺", cider: "🍏", premix: "🥤", rum: "🏴‍☠️", bourbon: "🥃", whisky: "🥃", vodka: "🍸", gin: "🍸", brandy: "🥃", redwine: "🍷", whitewine: "🥂" };
 const RADII = [5, 10, 15, 25, 50];
 const SCOTTY = `<img class="scotty-sm" src="img/scotty.svg" alt="">`;
@@ -43,7 +43,7 @@ const S = {
   user: null, profile: null,
   settings: { radius_km: 15, deal_price: 55, deal_pack: 30, fuel_per_km: 0.20 },
   pos: { ...JACOBS_WELL, gps: false },
-  products: [], productId: null, category: "beer", favs: new Map(), stores: [], osm: [], rows: [], myVotes: {},
+  products: [], productId: null, category: "beer", beerFmt: "can", favs: new Map(), stores: [], osm: [], rows: [], myVotes: {},
   gpsPos: null, scout: null,       // scout = a spot picked in 📍 Scout Around (null = use GPS / home)
   dealsSeen: new Set(),
 };
@@ -52,8 +52,10 @@ const S = {
 const money = n => "$" + Number(n).toFixed(2);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 const product = (id = S.productId) => S.products.find(p => p.id === id) || { std_pack: 30, unit: "can", short_name: "Super Crisp" };
-const unitName = (p = product()) => p.unit === "bottle" ? "bottle" : "can";
+const isStubby = (p = product()) => p.category === "beer" && p.unit === "bottle";
+const unitName = (p = product()) => isStubby(p) ? "stubby" : p.unit === "bottle" ? "bottle" : "can";
 function packName(n, p = product()) {
+  if (isStubby(p)) return ({ 1: "stubby", 6: "6 pack", 24: "24 carton" })[n] || `${n} stubbies`;
   if (p.unit === "bottle") return n === 1 ? "bottle" : n === 12 ? "dozen" : `${n} bottles`;
   return ({ 1: "single can", 24: "24 block", 30: "30 block" })[n] || `${n} pack`;
 }
@@ -182,6 +184,7 @@ async function loadStatic() {
   if (!S.products.find(x => x.id === S.productId)) S.productId = S.products[0]?.id;
   S.category = local.get("category", product().category || "beer");
   S.scout = local.get("scout", null);
+  S.beerFmt = product().category === "beer" ? product().unit : local.get("beerFmt", "can");
   renderPicker();
 }
 
@@ -195,11 +198,13 @@ async function loadFavs() {
 // ---------- 🍺🥃🍷 category chips + drink picker ----------
 function productsIn(cat) {
   if (cat === "fav") return S.products.filter(p => S.favs.has(p.id));
-  return S.products.filter(p => p.category === cat).sort((a, b) => (a.rank ?? 99) - (b.rank ?? 99));
+  return S.products.filter(p => p.category === cat && (cat !== "beer" || p.unit === S.beerFmt)).sort((a, b) => (a.rank ?? 99) - (b.rank ?? 99));
 }
 function renderPicker() {
   $("cats").innerHTML = CATS.map(([k, label]) => `<button class="cat ${k === S.category ? "on" : ""}" data-cat="${k}">${label}</button>`).join("");
   $("catNote").textContent = CAT_NOTE[S.category] || "🔥 Popular picks. Prices from Dan's, BWS and scouts like you. Swipe for more →";
+  $("beerFmt").classList.toggle("hide", S.category !== "beer");
+  $("beerFmt").querySelectorAll("[data-fmt]").forEach(b => b.classList.toggle("on", b.dataset.fmt === S.beerFmt));
   renderDrinks(true);
   renderFav();
 }
@@ -243,6 +248,7 @@ function renderFav() {
 function chooseProduct(id) {
   if (!id) return;
   S.productId = id; local.set("product", id);
+  if (product().category === "beer" && product().unit !== S.beerFmt) { S.beerFmt = product().unit; local.set("beerFmt", S.beerFmt); }
   renderFav(); render();
   if (!S.rows.some(r => r.product_id === id)) loadPrices();
 }
@@ -252,6 +258,17 @@ $("cats").addEventListener("click", e => {
   renderPicker();
   const list = productsIn(S.category);
   if (list.length && !list.find(p => p.id === S.productId)) chooseProduct(list[0].id);
+  loadPrices();
+});
+$("beerFmt").addEventListener("click", e => {
+  const b = e.target.closest("[data-fmt]"); if (!b || b.dataset.fmt === S.beerFmt) return;
+  S.beerFmt = b.dataset.fmt; local.set("beerFmt", S.beerFmt);
+  const list = productsIn("beer");
+  // jump to the same beer in the other format if we have it (Super Crisp cans → Super Crisp stubbies)
+  const base = s => nameOf(s).replace(/ (30 block|stubbies)$/, "");
+  const twin = list.find(p => base(p) === base(product())) || list[0];
+  renderPicker();
+  if (twin) chooseProduct(twin.id);
   loadPrices();
 });
 $("drinks").addEventListener("click", e => {
@@ -508,7 +525,7 @@ function openAdd(storeId) {
   fillStoreSelect(storeId);
   const p = product();
   $("addWhat").textContent = nameOf(p);
-  $("addPack").innerHTML = PACK_CHOICES[p.unit === "bottle" ? "bottle" : "can"]
+  $("addPack").innerHTML = PACK_CHOICES[isStubby(p) ? "stubby" : p.unit === "bottle" ? "bottle" : "can"]
     .map(n => `<option value="${n}" ${n === stdPack() ? "selected" : ""}>${packName(n)}</option>`).join("");
   $("addPrice").value = ""; $("addPhoto").value = "";
   $("newStore").classList.add("hide"); $("weird").classList.add("hide");
