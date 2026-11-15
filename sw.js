@@ -1,6 +1,6 @@
 // Bottlo Scout background helper: keeps the app shell handy and shows alerts.
-const CACHE = "bottlo-scout-v4";
-const SHELL = ["./", "index.html", "style.css", "app.js", "config.js", "icons/icon-192.png"];
+const CACHE = "bottlo-scout-v5";
+const SHELL = ["./", "index.html", "style.css", "app.js", "config.js", "icons/icon-192.png", "img/scotty.svg"];
 self.addEventListener("install", e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).catch(() => {})); self.skipWaiting(); });
 self.addEventListener("activate", e => { e.waitUntil(self.clients.claim()); });
 // Network first, so prices are always fresh; fall back to the saved copy if you're offline.

@@ -4,27 +4,34 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Bottlo Scout</title>
-<meta name="theme-color" content="#0e2a2b">
+<meta name="theme-color" content="#F3F7FA">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Bottlo Scout">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <link rel="icon" href="icons/icon-192.png">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Alfa+Slab+One&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <div class="wrap">
   <header>
-    <div>
-      <h1>Bottlo <span>Scout</span></h1>
-      <p class="tagline">Don’t shop around, Scout around 🔍</p>
-      <p class="sub" id="where">Finding you…</p>
+    <div class="brand">
+      <img class="logo" src="icons/icon-192.png" alt="">
+      <div>
+        <h1>Bottlo <span>Scout</span></h1>
+        <p class="tagline">Don’t shop around, Scout around</p>
+      </div>
     </div>
     <button class="icon" id="openSettings" aria-label="Settings">⚙️</button>
   </header>
+
+  <button class="locbar" id="openScout" aria-label="Scout Around: change where you're looking">
+    <span class="pin" id="locPin">📍</span><span class="place" id="locName">Finding you…</span><span class="go">Scout Around</span>
+  </button>
+  <p class="sub" id="where"></p>
 
   <div id="installTip" class="card tipcard hide">
     <b>📲 Make it a real app</b>
@@ -34,8 +41,9 @@
 
   <div class="cats" id="cats"></div>
   <p class="note" id="catNote"></p>
-  <div class="prodbar">
-    <select id="productPick" aria-label="Drink"></select>
+  <div class="drinks" id="drinks" aria-label="Drinks"></div>
+  <div class="selhead">
+    <h2 id="selName">Super Crisp</h2>
     <button class="icon fav" id="favBtn" aria-label="Favourite">☆</button>
   </div>
   <div class="card favbox hide" id="favBox">
@@ -49,12 +57,12 @@
   <div id="winner"></div>
 
   <div class="rowhead">
-    <h2>Shops within <span id="radiusLbl">15</span> km</h2>
+    <h2>Bottlos within <span id="radiusLbl">15</span> km</h2>
     <label class="mini"><input type="checkbox" id="fuel"> ⛽ count petrol</label>
   </div>
   <div class="list" id="list"><div class="card empty">Loading prices…</div></div>
 
-  <p class="foot">Prices come from 🤖 the Robot, 📸 photos and 👤 people like you. They fade out after 7 days unless someone 👍s them. Distances are straight-line, so roads may be a bit longer.</p>
+  <p class="foot">Prices come from 🤖 the Robot, 📸 photos and 👤 people like you. They fade out after 7 days unless someone 👍s them. Distances are straight-line, so roads may be a bit longer. Shop locations from © OpenStreetMap contributors.</p>
 </div>
 
 <button class="fab" id="openAdd">＋ Add a price</button>
@@ -123,6 +131,24 @@
     <input id="addPhoto" type="file" accept="image/*" capture="environment">
     <div id="weird" class="warn hide">🤔 That price looks unusual. Add a photo of the price tag so people trust it.</div>
     <button class="primary" id="savePrice">Share with everyone</button>
+  </div>
+</div>
+
+<div class="sheet hide" id="sheetScout">
+  <div class="panel">
+    <button class="close" data-close>✕</button>
+    <h3>📍 Scout Around</h3>
+    <p>Away from home? Type a postcode or suburb anywhere in Australia and see the bottlos around there.</p>
+    <div class="row">
+      <div style="flex:3"><input id="scoutQ" type="search" placeholder="e.g. 4217 or Byron Bay" autocomplete="off" enterkeyhint="search"></div>
+      <div style="flex:1"><button class="primary" id="scoutGo" style="margin-top:0;height:100%">Go</button></div>
+    </div>
+    <div class="list" id="scoutResults" style="margin-top:10px"></div>
+    <button class="ghost" id="scoutHere">📍 Where I am right now</button>
+    <button class="ghost" id="scoutHome">🏠 Back to my home spot</button>
+    <label>How far to look</label>
+    <div class="radios" id="scoutRadius"></div>
+    <p class="note">Your 🔔 deal alerts still watch your home spot, wherever you scout.</p>
   </div>
 </div>
 

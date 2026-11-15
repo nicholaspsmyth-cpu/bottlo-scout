@@ -1,5 +1,5 @@
 // =====================================================================
-//  BOTTLO SCOUT – VERSION 3 APP (every drink)
+//  BOTTLO SCOUT – VERSION 4 APP (Esky look, Scout Around, drink cards)
 //  You shouldn't need to change anything in here. Your keys go in config.js.
 // =====================================================================
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
@@ -19,6 +19,17 @@ const CAT_NOTE = {
   fav: "Your ⭐ favourites. Tap ⭐ on any drink to add it here.",
 };
 const PACK_CHOICES = { can: [1, 4, 6, 10, 16, 24, 30], bottle: [1, 6, 12] };
+const CAT_EMOJI = { beer: "🍺", cider: "🍏", premix: "🥤", rum: "🏴‍☠️", bourbon: "🥃", whisky: "🥃", vodka: "🍸", gin: "🍸", brandy: "🥃", redwine: "🍷", whitewine: "🥂" };
+const RADII = [5, 10, 15, 25, 50];
+const SCOTTY = `<img class="scotty-sm" src="img/scotty.svg" alt="">`;
+// Chains whose 🤖 Robot price is the same online price at every one of their shops
+const ONLINE_CHAINS = ["Dan Murphy's", "BWS"];
+const CHAINS = [[/dan murphy/i, "Dan Murphy's"], [/\bbws\b/i, "BWS"], [/liquorland/i, "Liquorland"], [/liquor legends/i, "Liquor Legends"],
+  [/cellarbrations/i, "Cellarbrations"], [/bottlemart/i, "Bottlemart"], [/first choice/i, "First Choice Liquor"], [/super cellars/i, "Super Cellars"],
+  [/thirsty camel/i, "Thirsty Camel"], [/iga/i, "IGA Liquor"], [/porters/i, "Porters"], [/vintage cellars/i, "Vintage Cellars"], [/bottle-?o\b/i, "The Bottle-O"]];
+const chainOf = name => (CHAINS.find(([re]) => re.test(name || "")) || [])[1] || "Independent";
+const OVERPASS = ["https://overpass-api.de/api/interpreter", "https://overpass.kumi.systems/api/interpreter"];
+const STATES = { Queensland: "QLD", "New South Wales": "NSW", Victoria: "VIC", Tasmania: "TAS", "South Australia": "SA", "Western Australia": "WA", "Northern Territory": "NT", "Australian Capital Territory": "ACT" };
 
 if (!SUPABASE_URL || SUPABASE_URL.includes("PASTE")) {
   document.querySelector(".wrap").innerHTML =
@@ -32,14 +43,15 @@ const S = {
   user: null, profile: null,
   settings: { radius_km: 15, deal_price: 55, deal_pack: 30, fuel_per_km: 0.20 },
   pos: { ...JACOBS_WELL, gps: false },
-  products: [], productId: null, category: "beer", favs: new Map(), stores: [], rows: [], myVotes: {},
+  products: [], productId: null, category: "beer", favs: new Map(), stores: [], osm: [], rows: [], myVotes: {},
+  gpsPos: null, scout: null,       // scout = a spot picked in 📍 Scout Around (null = use GPS / home)
   dealsSeen: new Set(),
 };
 
 // ---------- little helpers ----------
 const money = n => "$" + Number(n).toFixed(2);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
-const product = () => S.products.find(p => p.id === S.productId) || { std_pack: 30, unit: "can", short_name: "Super Crisp" };
+const product = (id = S.productId) => S.products.find(p => p.id === id) || { std_pack: 30, unit: "can", short_name: "Super Crisp" };
 const unitName = (p = product()) => p.unit === "bottle" ? "bottle" : "can";
 function packName(n, p = product()) {
   if (p.unit === "bottle") return n === 1 ? "bottle" : n === 12 ? "dozen" : `${n} bottles`;
@@ -47,6 +59,8 @@ function packName(n, p = product()) {
 }
 const stdPack = (p = product()) => Number(p.std_pack || 1);
 const nameOf = p => p.short_name || p.name;
+// price for the usual pack (no rounding wobble when the price was seen in that exact pack)
+const packPrice = (r, sp = stdPack()) => Number(r.pack_size) === sp ? Number(r.price) : Number(r.per_unit) * sp;
 const local = {
   get(k, d) { try { const v = localStorage.getItem("cf." + k); return v === null ? d : JSON.parse(v); } catch { return d; } },
   set(k, v) { try { localStorage.setItem("cf." + k, JSON.stringify(v)); } catch {} },
@@ -75,20 +89,85 @@ function ago(t) {
 const mapsLink = s => `https://maps.apple.com/?daddr=${s.lat},${s.lng}&q=${encodeURIComponent(s.name)}`;
 const photoUrl = p => sb.storage.from("price-photos").getPublicUrl(p).data.publicUrl;
 
-// ---------- location ----------
-function locate() {
-  if (!navigator.geolocation) return useHome();
+// ---------- 📍 location + Scout Around ----------
+const homeSpot = () => ({ lat: S.settings.home_lat ?? JACOBS_WELL.lat, lng: S.settings.home_lng ?? JACOBS_WELL.lng });
+function setPos() {
+  const old = S.pos;
+  if (S.scout) S.pos = { lat: S.scout.lat, lng: S.scout.lng, gps: false };
+  else if (S.gpsPos) S.pos = { ...S.gpsPos, gps: true };
+  else S.pos = { ...homeSpot(), gps: false };
+  renderLoc();
+  if (!old || km(old, S.pos) > 0.5 || !S.osmFor) loadOsm();
+  render();
+}
+function renderLoc() {
+  const r = S.settings.radius_km;
+  if (S.scout) {
+    $("locPin").textContent = S.scout.home ? "🏠" : "🧭";
+    $("locName").textContent = `${S.scout.name} · ${r} km`;
+    $("where").textContent = S.scout.home ? "Showing bottlos around your home spot." : "Scouting around here. Tap Scout Around to change it.";
+  } else if (S.gpsPos) {
+    $("locPin").textContent = "📍"; $("locName").textContent = `Near you · ${r} km`;
+    $("where").textContent = "";
+  } else {
+    $("locPin").textContent = "🏠"; $("locName").textContent = `Home spot · ${r} km`;
+    $("where").textContent = "Allow location for live GPS, or tap Scout Around.";
+  }
+}
+function locate(onFail) {
+  if (!navigator.geolocation) { setPos(); return onFail?.(); }
   navigator.geolocation.getCurrentPosition(
-    p => { S.pos = { lat: p.coords.latitude, lng: p.coords.longitude, gps: true }; $("where").textContent = "📍 Using your location"; render(); },
-    () => useHome(),
+    p => { S.gpsPos = { lat: p.coords.latitude, lng: p.coords.longitude }; setPos(); },
+    () => { setPos(); onFail?.(); },
     { enableHighAccuracy: true, timeout: 10000, maximumAge: 120000 }
   );
 }
-function useHome() {
-  const s = S.settings;
-  S.pos = { lat: s.home_lat ?? JACOBS_WELL.lat, lng: s.home_lng ?? JACOBS_WELL.lng, gps: false };
-  $("where").textContent = "🏠 Using your home spot. Allow location for live GPS.";
-  render();
+
+// Every bottlo on the free OpenStreetMap near where you're looking (works anywhere in Australia)
+async function loadOsm() {
+  const pos = S.pos, r = Math.min(50, S.settings.radius_km);
+  const key = `${pos.lat.toFixed(2)},${pos.lng.toFixed(2)},${r}`;
+  S.osmFor = key;
+  const cache = local.get("osmCache", []);
+  const hit = cache.find(c => c.key === key && Date.now() - c.t < 3 * 86400000);
+  if (hit) { S.osm = hit.list; render(); return; }
+  const q = `[out:json][timeout:25];(nwr["shop"="alcohol"](around:${r * 1000},${pos.lat},${pos.lng});nwr["shop"="wine"](around:${r * 1000},${pos.lat},${pos.lng}););out center tags;`;
+  for (const url of OVERPASS) {
+    try {
+      const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 25000);
+      const res = await fetch(url, { method: "POST", body: "data=" + encodeURIComponent(q), headers: { "Content-Type": "application/x-www-form-urlencoded" }, signal: ctl.signal });
+      clearTimeout(t);
+      if (!res.ok) continue;
+      const j = await res.json();
+      const list = (j.elements || []).map(el => {
+        const tg = el.tags || {}, name = tg.name || tg.brand;
+        const lat = el.lat ?? el.center?.lat, lng = el.lon ?? el.center?.lon;
+        if (!name || lat == null) return null;
+        const osm_id = (el.type === "node" ? 1 : el.type === "way" ? 2 : 3) * 1e11 + el.id;   // one number per map thing
+        return { id: "osm-" + osm_id, osm_id, name, chain: chainOf(name + " " + (tg.brand || "")), suburb: tg["addr:suburb"] || tg["addr:city"] || "", lat, lng, osm: true };
+      }).filter(Boolean);
+      if (S.osmFor !== key) return;               // you moved on while we were looking
+      S.osm = list;
+      local.set("osmCache", [{ key, t: Date.now(), list }, ...cache.filter(c => c.key !== key)].slice(0, 4));
+      return render();
+    } catch {}
+  }
+  if (S.osmFor === key) { S.osm = []; render(); }
+}
+
+// Our own shops + map shops, with doubles thrown out
+function allStores() {
+  const out = [...S.stores];
+  const known = new Set(S.stores.map(s => s.osm_id).filter(Boolean).map(Number));
+  for (const o of S.osm) {
+    if (known.has(o.osm_id)) continue;
+    const twin = S.stores.some(s => {
+      const d = km(s, o);
+      return d < 0.06 || (d < 0.2 && (s.chain === o.chain && o.chain !== "Independent" || s.name.toLowerCase().slice(0, 5) === o.name.toLowerCase().slice(0, 5)));
+    });
+    if (!twin) out.push(o);
+  }
+  return out;
 }
 
 // ---------- loading data ----------
@@ -102,6 +181,7 @@ async function loadStatic() {
   S.productId = S.productId ?? local.get("product", S.products.find(x => x.stockcode === "6076024")?.id ?? S.products[0]?.id);
   if (!S.products.find(x => x.id === S.productId)) S.productId = S.products[0]?.id;
   S.category = local.get("category", product().category || "beer");
+  S.scout = local.get("scout", null);
   renderPicker();
 }
 
@@ -119,16 +199,41 @@ function productsIn(cat) {
 }
 function renderPicker() {
   $("cats").innerHTML = CATS.map(([k, label]) => `<button class="cat ${k === S.category ? "on" : ""}" data-cat="${k}">${label}</button>`).join("");
-  const list = productsIn(S.category);
-  $("catNote").textContent = CAT_NOTE[S.category] || "🔥 Popular picks. Prices from Dan's, BWS and scouts like you.";
-  $("productPick").innerHTML = list.length
-    ? list.map((p, i) => `<option value="${p.id}">${S.category === "fav" ? "⭐" : (p.rank ?? i + 1) + "."} ${esc(nameOf(p))}</option>`).join("")
-    : `<option value="">No favourites yet</option>`;
-  if (list.find(p => p.id === S.productId)) $("productPick").value = S.productId;
+  $("catNote").textContent = CAT_NOTE[S.category] || "🔥 Popular picks. Prices from Dan's, BWS and scouts like you. Swipe for more →";
+  renderDrinks(true);
   renderFav();
+}
+// 📸 the swipeable drink cards
+function drinkPhoto(p) {
+  const em = CAT_EMOJI[p.category] || "🍾";
+  const img = src => `<img src="${esc(src)}" alt="" loading="lazy" onerror="this.replaceWith('${em}')">`;
+  if (p.image_url) return img(p.image_url);
+  const shot = S.rows.find(r => r.product_id === p.id && r.photo_path && !(r.downs >= 3 && r.downs > r.ups));
+  if (shot) return img(photoUrl(shot.photo_path));
+  return em;
+}
+function renderDrinks(scroll) {
+  const list = productsIn(S.category);
+  if (!list.length) {
+    $("drinks").innerHTML = `<div class="card empty" style="flex:1">${SCOTTY}<b>No favourites yet</b>Tap ☆ on any drink and it lands here.</div>`;
+    return;
+  }
+  $("drinks").innerHTML = list.map((p, i) => {
+    const best = boardData(p.id).find(b => b.best);
+    const price = best ? `<div class="dprice">${money(packPrice(best.best, stdPack(p)))}</div><div class="dsub">${esc(best.store.name)}</div>`
+      : `<div class="dprice none">No price nearby yet</div>`;
+    return `<button class="dcard ${p.id === S.productId ? "on" : ""}" data-pid="${p.id}">
+      <div class="dphoto">${drinkPhoto(p)}</div>
+      ${S.category === "fav" ? "" : `<span class="drank">#${p.rank ?? i + 1}</span>`}
+      ${S.favs.has(p.id) ? `<span class="dfav">⭐</span>` : ""}
+      <div class="dname">${esc(nameOf(p))}</div>${price}</button>`;
+  }).join("");
+  if (scroll) $("drinks").querySelector(".dcard.on")?.scrollIntoView({ block: "nearest", inline: "center" });
 }
 function renderFav() {
   const isFav = S.favs.has(S.productId);
+  const nm = nameOf(product());
+  $("selName").textContent = nm + (stdPack() > 1 && !nm.includes(packName(stdPack())) ? ` · ${packName(stdPack())}` : "");
   $("favBtn").textContent = isFav ? "⭐" : "☆";
   $("favBox").classList.toggle("hide", !isFav);
   $("favPack").textContent = packName(stdPack());
@@ -138,7 +243,8 @@ function renderFav() {
 function chooseProduct(id) {
   if (!id) return;
   S.productId = id; local.set("product", id);
-  renderFav(); S.rows = []; render(); loadPrices();
+  renderFav(); render();
+  if (!S.rows.some(r => r.product_id === id)) loadPrices();
 }
 $("cats").addEventListener("click", e => {
   const b = e.target.closest("[data-cat]"); if (!b) return;
@@ -146,6 +252,11 @@ $("cats").addEventListener("click", e => {
   renderPicker();
   const list = productsIn(S.category);
   if (list.length && !list.find(p => p.id === S.productId)) chooseProduct(list[0].id);
+  loadPrices();
+});
+$("drinks").addEventListener("click", e => {
+  const b = e.target.closest("[data-pid]"); if (!b) return;
+  chooseProduct(+b.dataset.pid);
 });
 $("favBtn").addEventListener("click", async () => {
   if (needSignIn()) return;
@@ -176,8 +287,10 @@ $("saveFav").addEventListener("click", async () => {
 async function loadPrices() {
   if (!S.productId) return;
   const since = new Date(Date.now() - FADE_DAYS * 86400000).toISOString();
+  // one trip to the Brain for every drink in this row of cards
+  const ids = [...new Set([S.productId, ...productsIn(S.category).map(p => p.id)])];
   const { data, error } = await sb.from("price_board").select("*")
-    .eq("product_id", S.productId).gte("last_confirmed", since).order("added_at", { ascending: false });
+    .in("product_id", ids).gte("last_confirmed", since).order("added_at", { ascending: false }).limit(2000);
   if (error) { toast("Couldn't load prices"); console.error(error); return; }
   S.rows = data.map(r => ({ ...r, price: +r.price, per_unit: +r.per_unit, ups: +r.ups, downs: +r.downs }));
   S.myVotes = {};
@@ -191,25 +304,33 @@ let reloadTimer;
 const reloadSoon = () => { clearTimeout(reloadTimer); reloadTimer = setTimeout(loadPrices, 400); };
 
 // ---------- the brains of the leaderboard ----------
-function boardData() {
-  const st = S.settings, useFuel = $("fuel").checked;
+function boardData(pid = S.productId) {
+  const st = S.settings, useFuel = $("fuel").checked, p = product(pid), sp = stdPack(p);
+  const chainOfStore = new Map(S.stores.map(s => [s.id, s.chain]));
   // throw out prices lots of people say are wrong
-  const ok = S.rows.filter(r => !(r.downs >= 3 && r.downs > r.ups));
+  const ok = S.rows.filter(r => r.product_id === pid && !(r.downs >= 3 && r.downs > r.ups));
   // for each shop + pack size, only the newest price counts (if it went up, the old cheap one is gone)
   const latest = new Map();
   for (const r of ok) { const k = r.store_id + ":" + r.pack_size; if (!latest.has(k)) latest.set(k, r); }
-  const byStore = new Map();
+  const byStore = new Map(), byChain = new Map();
   for (const r of latest.values()) {
     const cur = byStore.get(r.store_id);
     if (!cur || r.per_unit < cur.per_unit) byStore.set(r.store_id, r);
+    // 🤖 Dan's and BWS online prices are the same at every one of their shops
+    const ch = chainOfStore.get(r.store_id);
+    if (r.source === "robot" && ONLINE_CHAINS.includes(ch)) {
+      const c = byChain.get(ch);
+      if (!c || r.per_unit < c.per_unit) byChain.set(ch, r);
+    }
   }
-  return S.stores.map(s => {
+  return allStores().map(s => {
     const dist = km(S.pos, s);
-    const best = byStore.get(s.id) || null;
+    let best = byStore.get(s.id) || null;
+    if (!best && byChain.has(s.chain)) best = { ...byChain.get(s.chain), viaChain: true };
     let score = Infinity;
     if (best) {
       score = Number(best.per_unit);
-      if (useFuel) score += (dist * ROAD_FACTOR * 2 * st.fuel_per_km) / stdPack();
+      if (useFuel) score += (dist * ROAD_FACTOR * 2 * st.fuel_per_km) / sp;
     }
     return { store: s, dist, best, score };
   }).filter(x => x.dist <= st.radius_km)
@@ -218,11 +339,13 @@ function boardData() {
 const trusted = r => r.source === "robot" || r.source === "photo" || r.ups >= 2;
 const target = () => S.favs.get(S.productId) || 0;
 const isDeal = r => target() > 0 && Number(r.per_unit) * stdPack() <= target() + 0.001;
-const sourceBadge = r => r.source === "robot" ? "🤖 Robot (online price)" : r.source === "photo" ? "📸 " + esc(r.nickname || "someone") : "👤 " + esc(r.nickname || "someone");
+const sourceBadge = r => r.viaChain ? "🤖 Online price (in-store can differ by state)" : r.source === "robot" ? "🤖 Robot (online price)" : r.source === "photo" ? "📸 " + esc(r.nickname || "someone") : "👤 " + esc(r.nickname || "someone");
 
 // ---------- drawing the screen ----------
 function render() {
   $("radiusLbl").textContent = S.settings.radius_km;
+  if (!S.products.length) return;
+  renderDrinks(false);
   const board = boardData();
   const priced = board.filter(b => b.best);
   const st = S.settings;
@@ -230,41 +353,49 @@ function render() {
   // 🔔 deal banner
   const deals = priced.filter(b => isDeal(b.best));
   $("deal").innerHTML = deals.length ? `<div class="card dealbox"><b>🔔 Deal alert!</b>
-    ${esc(deals[0].store.name)} works out at ${money(deals[0].best.per_unit * stdPack())} for a ${packName(stdPack())}. That's under your ${money(target())} target!</div>` : "";
+    ${esc(deals[0].store.name)} works out at ${money(packPrice(deals[0].best))} for a ${packName(stdPack())}. That's under your ${money(target())} target!</div>` : "";
   deals.forEach(d => notifyDeal(d));
 
   // 🏆 winner
   if (!priced.length) {
-    $("winner").innerHTML = `<div class="card empty"><b>No prices yet for ${esc(nameOf(product()))}</b>The 🤖 Robot checks every morning. Or be the first: tap <b>Add a price</b> when you spot it in a bottlo.</div>`;
+    $("winner").innerHTML = `<div class="card empty">${SCOTTY}<b>No prices yet for ${esc(nameOf(product()))}</b>Scotty's still sussing this one out. The 🤖 Robot checks every morning, or be the first: tap <b>Add a price</b> when you spot it in a bottlo.</div>`;
   } else {
     const w = priced[0], r = w.best;
     const next = priced[1];
     let tip = "";
     if (w.store.chain !== "Dan Murphy's" && board.some(b => b.store.chain === "Dan Murphy's"))
-      tip = `<div class="note" style="color:#2a1d00;opacity:.8;margin-top:12px">💡 Dan Murphy's says it beats a cheaper advertised price on the same product. Show them this price at Dan's.</div>`;
+      tip = `<div class="tipline">💡 Dan Murphy's says it beats a cheaper advertised price on the same product. Show them this price at Dan's.</div>`;
     else if (next)
-      tip = `<div class="note" style="color:#2a1d00;opacity:.8;margin-top:12px">Saves you ${money((next.best.per_unit - r.per_unit) * stdPack())} on a ${packName(stdPack())} compared with ${esc(next.store.name)}.</div>`;
-    $("winner").innerHTML = `<div class="card winner"><div class="bubbles"></div>
-      <div class="tag">🏆 Cheapest near you ${trusted(r) ? "· ✅ trusted" : ""}</div>
+      tip = `<div class="tipline">💰 Saves you ${money((next.best.per_unit - r.per_unit) * stdPack())} on a ${packName(stdPack())} compared with ${esc(next.store.name)}.</div>`;
+    $("winner").innerHTML = `<div class="card winner">
+      <div class="tag">🏆 Cheapest ${S.scout && !S.scout.home ? "around " + esc(S.scout.name) : "near you"} ${trusted(r) ? "· ✅ trusted" : ""}</div>
       <div class="store">${esc(w.store.name)}</div>
-      <div>~${w.dist.toFixed(1)} km away · ${sourceBadge(r)} · ${ago(r.added_at)}</div>
-      <div class="big">${money(r.per_unit * stdPack())} <small>${stdPack() === 1 ? "a " + unitName() : "a " + packName(stdPack())}</small></div>
-      <div>${stdPack() > 1 ? money(r.per_unit) + " per " + unitName() + " · " : ""}${r.pack_size !== stdPack() ? `seen as ${money(r.price)} for a ${packName(r.pack_size)}` : esc(nameOf(product()))}</div>
+      <div class="meta">~${w.dist.toFixed(1)} km away · ${sourceBadge(r)} · ${ago(r.added_at)}</div>
+      <div class="big">${money(packPrice(r))} <small>${stdPack() === 1 ? "a " + unitName() : "a " + packName(stdPack())}</small></div>
+      <div class="meta">${stdPack() > 1 ? money(r.per_unit) + " per " + unitName() + " · " : ""}${r.pack_size !== stdPack() ? `seen as ${money(r.price)} for a ${packName(r.pack_size)}` : esc(nameOf(product()))}</div>
       <div style="margin-top:14px"><a class="btn" href="${mapsLink(w.store)}">📍 Take me there</a></div>${tip}</div>`;
   }
 
   // 📋 list
   $("list").innerHTML = board.length ? board.map((b, i) => itemHtml(b, i)).join("")
-    : `<div class="card empty"><b>No shops in range</b>Make your search radius bigger in ⚙️ Settings.</div>`;
+    : `<div class="card empty">${SCOTTY}<b>No bottlos in range</b>Scotty can't see any shops this close. Tap <b>Scout Around</b> and look further out.</div>`;
 }
 
 function itemHtml(b, i) {
   const s = b.store, r = b.best;
+  const addBtn = `<button class="chip" data-add="${s.id}">＋ ${r ? "New price" : "Add price"}</button>`;
+  if (r?.viaChain) return `<div class="item ${i === 0 ? "first" : ""}"><div class="top">
+      <div class="rank">${i + 1}</div>
+      <div class="mid"><div class="nm">${esc(s.name)} ${isDeal(r) ? "🔔" : ""}</div>
+        <div class="dt">~${b.dist.toFixed(1)} km${$("fuel").checked ? ` · ${money(b.score * stdPack())} with petrol` : ""}</div>
+        <div class="dt">${sourceBadge(r)} · ${ago(r.added_at)}</div></div>
+      <div class="pr"><b>${money(packPrice(r))}</b><span>${stdPack() === 1 ? "a " + unitName() : "a " + packName(stdPack())}</span></div></div>
+      <div class="actions">${addBtn}<a class="chip" href="${mapsLink(s)}">📍 Map</a></div></div>`;
   if (!r) return `<div class="item noprice"><div class="top">
       <div class="rank">–</div>
       <div class="mid"><div class="nm">${esc(s.name)}</div><div class="dt">~${b.dist.toFixed(1)} km · no price yet${s.robot_readable ? " · 🤖 Robot will check" : ""}</div></div>
       <div class="pr"><b>?</b></div></div>
-      <div class="actions"><button class="chip" data-add="${s.id}">＋ Add price</button><a class="chip" href="${mapsLink(s)}">📍 Map</a></div></div>`;
+      <div class="actions">${addBtn}<a class="chip" href="${mapsLink(s)}">📍 Map</a></div></div>`;
   const mine = S.user && r.added_by === S.user.id;
   const my = S.myVotes[r.id] || 0;
   const fuelTxt = $("fuel").checked ? ` · ${money(b.score * stdPack())} with petrol` : "";
@@ -277,14 +408,14 @@ function itemHtml(b, i) {
         <div class="dt">${money(r.price)} / ${packName(r.pack_size)} · ~${b.dist.toFixed(1)} km${fuelTxt}</div>
         <div class="dt">${sourceBadge(r)} · ${ago(r.added_at)}</div>
       </div>
-      <div class="pr"><b>${money(r.per_unit * stdPack())}</b><span>${stdPack() === 1 ? "a " + unitName() : "a " + packName(stdPack())}</span></div></div>
+      <div class="pr"><b>${money(packPrice(r))}</b><span>${stdPack() === 1 ? "a " + unitName() : "a " + packName(stdPack())}</span></div></div>
     <div class="actions">
       ${mine ? "" : `<button class="chip ${my === 1 ? "on" : ""}" data-vote="1" data-id="${r.id}">👍 ${r.ups}</button>
       <button class="chip ${my === -1 ? "on" : ""}" data-vote="-1" data-id="${r.id}">👎 ${r.downs}</button>`}
       ${mine ? `<span class="chip">👍 ${r.ups} · 👎 ${r.downs}</span>` : ""}
       ${r.photo_path ? `<a class="chip" href="${photoUrl(r.photo_path)}">📸 Photo</a>` : ""}
       <a class="chip" href="${mapsLink(s)}">📍 Map</a>
-      <button class="chip" data-add="${s.id}">＋ New price</button>
+      ${addBtn}
       ${canDelete ? `<button class="chip danger" data-del="${r.id}">🗑</button>` : ""}
       ${canBan ? `<button class="chip danger" data-ban="${r.added_by}" data-nick="${esc(r.nickname)}">🚫 Ban</button>` : ""}
     </div></div>`;
@@ -303,7 +434,7 @@ async function notifyDeal(d) {
   try {
     const reg = await navigator.serviceWorker?.ready;
     reg?.showNotification("🔔 Bottlo Scout deal!", {
-      body: `${d.store.name}: ${nameOf(product())} ${money(d.best.per_unit * stdPack())} a ${packName(stdPack())}`,
+      body: `${d.store.name}: ${nameOf(product())} ${money(packPrice(d.best))} a ${packName(stdPack())}`,
       icon: "icons/icon-192.png", tag: "deal-" + key,
     });
   } catch {}
@@ -365,10 +496,11 @@ $("saveNick").addEventListener("click", async () => {
 
 // ---------- adding a price ----------
 function fillStoreSelect(preselect) {
-  const list = S.stores.map(s => ({ s, d: km(S.pos, s) })).sort((a, b) => a.d - b.d);
+  const list = allStores().map(s => ({ s, d: km(S.pos, s) })).sort((a, b) => a.d - b.d)
+    .filter((x, i) => i < 40 || x.s.id === preselect);
   $("addStore").innerHTML = list.map(({ s, d }) =>
-    `<option value="${s.id}">${d < 0.3 && S.pos.gps ? "📍 You're here: " : ""}${esc(s.name)} (~${d.toFixed(1)} km)</option>`).join("");
-  if (preselect) $("addStore").value = preselect;
+    `<option value="${s.id}">${S.gpsPos && km(S.gpsPos, s) < 0.3 ? "📍 You're here: " : ""}${esc(s.name)} (~${d.toFixed(1)} km)</option>`).join("");
+  if (preselect != null) $("addStore").value = preselect;
 }
 function openAdd(storeId) {
   if (needSignIn()) return;
@@ -396,6 +528,20 @@ function looksWeird() {
 $("addPrice").addEventListener("input", () => $("weird").classList.toggle("hide", !looksWeird()));
 $("addPack").addEventListener("change", () => $("weird").classList.toggle("hide", !looksWeird()));
 
+// A shop from the map gets saved into our own list the first time someone adds a price there
+async function saveMapShop(key) {
+  const o = S.osm.find(x => x.id === key);
+  if (!o) throw new Error("Couldn't find that shop, try again");
+  const found = await sb.from("stores").select("*").eq("osm_id", o.osm_id).maybeSingle();
+  if (found.data) { if (!S.stores.some(s => s.id === found.data.id)) S.stores.push(found.data); return found.data.id; }
+  const { data, error } = await sb.from("stores").insert({
+    name: o.name, suburb: o.suburb || null, chain: o.chain, lat: o.lat, lng: o.lng, osm_id: o.osm_id, added_by: S.user.id,
+  }).select().single();
+  if (error) throw error;
+  S.stores.push(data);
+  return data.id;
+}
+
 async function shrinkPhoto(file) {
   const img = await createImageBitmap(file);
   const scale = Math.min(1, 1280 / Math.max(img.width, img.height));
@@ -414,13 +560,14 @@ $("savePrice").addEventListener("click", async () => {
   if (looksWeird() && !file) return toast("That price looks odd. Add a photo of the tag please 📸");
   btn.disabled = true; btn.textContent = "Sharing…";
   try {
-    let storeId = +$("addStore").value;
+    let storeId = $("addStore").value;
+    storeId = /^osm-/.test(storeId) ? await saveMapShop(storeId) : +storeId;
     // new shop?
     if (!$("newStore").classList.contains("hide") && $("nsName").value.trim()) {
-      if (!S.pos.gps) throw new Error("Turn on location so we know where the new shop is");
+      if (!S.gpsPos) throw new Error("Turn on location so we know where the new shop is");
       const { data, error } = await sb.from("stores").insert({
         name: $("nsName").value.trim(), suburb: $("nsSuburb").value.trim() || null,
-        chain: "Independent", lat: S.pos.lat, lng: S.pos.lng, added_by: S.user.id,
+        chain: chainOf($("nsName").value), lat: S.gpsPos.lat, lng: S.gpsPos.lng, added_by: S.user.id,
       }).select().single();
       if (error) throw error;
       storeId = data.id; S.stores.push(data);
@@ -451,7 +598,7 @@ $("savePrice").addEventListener("click", async () => {
 // ---------- votes, delete, ban ----------
 $("list").addEventListener("click", async e => {
   const t = e.target.closest("button"); if (!t) return;
-  if (t.dataset.add) return openAdd(+t.dataset.add);
+  if (t.dataset.add) return openAdd(/^osm-/.test(t.dataset.add) ? t.dataset.add : +t.dataset.add);
   if (t.dataset.vote) {
     if (needSignIn()) return;
     const id = +t.dataset.id, v = +t.dataset.vote;
@@ -486,7 +633,8 @@ $("openSettings").addEventListener("click", () => {
 });
 $("saveSettings").addEventListener("click", async () => {
   const s = S.settings;
-  s.radius_km = Math.max(1, +$("sRadius").value || 15);
+  const oldR = s.radius_km;
+  s.radius_km = Math.min(100, Math.max(1, +$("sRadius").value || 15));
   s.fuel_per_km = Math.max(0, +$("sFuel").value || 0);
   local.set("settings", pickSettings(s));
   if (S.user && S.profile) {
@@ -498,7 +646,9 @@ $("saveSettings").addEventListener("click", async () => {
       else S.profile.nickname = nick;
     }
   }
-  close("sheetSettings"); render(); toast("Saved ✓");
+  close("sheetSettings"); renderLoc();
+  if (oldR !== s.radius_km) loadOsm();
+  render(); toast("Saved ✓");
 });
 // ---------- 🔔 background deal alerts (web push) ----------
 function b64ToBytes(b64) {
@@ -546,6 +696,8 @@ $("setHome").addEventListener("click", () => {
     S.settings.home_lat = p.coords.latitude; S.settings.home_lng = p.coords.longitude;
     local.set("settings", pickSettings(S.settings));
     if (S.user && S.profile) await sb.from("settings").upsert({ user_id: S.user.id, ...pickSettings(S.settings) });
+    if (S.scout?.home) { S.scout = { name: "Home spot", ...homeSpot(), home: true }; local.set("scout", S.scout); }
+    setPos();
     toast("Home saved 🏠 Alerts will look around here.");
   }, () => toast("Allow location first, then try again"), { enableHighAccuracy: true, timeout: 10000 });
 });
@@ -555,7 +707,64 @@ $("signInOut").addEventListener("click", async () => {
   else open("sheetSignin");
 });
 $("fuel").addEventListener("change", () => { local.set("fuel", $("fuel").checked); render(); });
-$("productPick").addEventListener("change", e => chooseProduct(+e.target.value));
+
+// ---------- 📍 Scout Around sheet ----------
+let scoutHits = [];
+function renderRadii() {
+  $("scoutRadius").innerHTML = RADII.map(r => `<button class="chip ${r === S.settings.radius_km ? "on" : ""}" data-r="${r}">${r} km</button>`).join("");
+}
+$("openScout").addEventListener("click", () => {
+  $("scoutQ").value = ""; $("scoutResults").innerHTML = ""; scoutHits = [];
+  renderRadii(); open("sheetScout");
+});
+function placeLabel(r) {
+  const a = r.address || {};
+  const place = a.suburb || a.town || a.city || a.village || a.hamlet || a.locality || r.name || r.display_name.split(",")[0];
+  const st = STATES[a.state] || a.state || "";
+  return [place, [st, a.postcode].filter(Boolean).join(" ")].filter(Boolean).join(", ");
+}
+async function scoutSearch() {
+  const q = $("scoutQ").value.trim();
+  if (q.length < 3) return toast("Type a postcode or suburb");
+  $("scoutGo").disabled = true;
+  $("scoutResults").innerHTML = `<div class="note">🔍 Scotty's looking…</div>`;
+  try {
+    const p = new URLSearchParams({ format: "jsonv2", addressdetails: "1", limit: "6", countrycodes: "au", "accept-language": "en" });
+    if (/^\d{4}$/.test(q)) { p.set("postalcode", q); p.set("country", "Australia"); } else p.set("q", q);
+    const res = await fetch("https://nominatim.openstreetmap.org/search?" + p);
+    const j = res.ok ? await res.json() : [];
+    const seen = new Set();
+    scoutHits = j.map(r => ({ name: placeLabel(r), lat: +r.lat, lng: +r.lon }))
+      .filter(h => !seen.has(h.name) && seen.add(h.name));
+    $("scoutResults").innerHTML = scoutHits.length
+      ? scoutHits.map((h, i) => `<button class="item" style="text-align:left;font:600 15px Inter,sans-serif;color:var(--ink);cursor:pointer" data-hit="${i}">📍 ${esc(h.name)}</button>`).join("")
+      : `<div class="note">Couldn't find "${esc(q)}". Try a 4-digit postcode or check the spelling.</div>`;
+  } catch {
+    $("scoutResults").innerHTML = `<div class="note">Couldn't search right now. Check your internet and try again.</div>`;
+  } finally { $("scoutGo").disabled = false; }
+}
+function scoutTo(spot) {
+  S.scout = spot; local.set("scout", spot);
+  close("sheetScout"); setPos();
+  toast(spot ? (spot.home ? "🏠 Back home" : `🧭 Scouting around ${spot.name}`) : "📍 Using where you are");
+}
+$("scoutGo").addEventListener("click", scoutSearch);
+$("scoutQ").addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); scoutSearch(); } });
+$("scoutResults").addEventListener("click", e => {
+  const b = e.target.closest("[data-hit]"); if (b) scoutTo(scoutHits[+b.dataset.hit]);
+});
+$("scoutHere").addEventListener("click", () => {
+  scoutTo(null);
+  locate(() => toast("Allow location in iPhone Settings so Scotty knows where you are"));
+});
+$("scoutHome").addEventListener("click", () => scoutTo({ name: "Home spot", ...homeSpot(), home: true }));
+$("scoutRadius").addEventListener("click", async e => {
+  const b = e.target.closest("[data-r]"); if (!b) return;
+  S.settings.radius_km = +b.dataset.r; renderRadii();
+  local.set("settings", pickSettings(S.settings));
+  if (S.user && S.profile) sb.from("settings").upsert({ user_id: S.user.id, ...pickSettings(S.settings) });
+  renderLoc(); loadOsm(); render();
+});
 
 // ---------- age check + install tip ----------
 if (!local.get("age18", false)) open("sheetAge");
@@ -571,7 +780,7 @@ $("hideTip").addEventListener("click", () => { local.set("tipHidden", true); $("
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
   await loadStatic();
   await refreshUser();
-  useHome();          // show something straight away…
+  setPos();           // show something straight away (home spot or your Scout Around spot)…
   locate();           // …then switch to GPS when it's ready
   await loadPrices();
   sb.channel("board")
