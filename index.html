@@ -32,7 +32,18 @@
     <button class="link" id="hideTip">Got it</button>
   </div>
 
-  <select id="productPick" class="hide" aria-label="Drink"></select>
+  <div class="cats" id="cats"></div>
+  <p class="note" id="catNote"></p>
+  <div class="prodbar">
+    <select id="productPick" aria-label="Drink"></select>
+    <button class="icon fav" id="favBtn" aria-label="Favourite">☆</button>
+  </div>
+  <div class="card favbox hide" id="favBox">
+    <div class="favrow">🔔 Buzz me when a <span id="favPack">30 block</span> is under $
+      <input id="favTarget" type="number" inputmode="decimal" step="0.01" min="0" placeholder="55">
+      <button class="chip on" id="saveFav">Save</button>
+    </div>
+  </div>
 
   <div id="deal"></div>
   <div id="winner"></div>
@@ -85,6 +96,7 @@
   <div class="panel">
     <button class="close" data-close>✕</button>
     <h3>Add a price</h3>
+    <p id="addWhat"></p>
     <label for="addStore">Shop</label>
     <select id="addStore"></select>
     <button class="link" id="showNewStore">Shop not listed? Add it</button>
@@ -99,14 +111,12 @@
       <div>
         <label for="addPack">Pack</label>
         <select id="addPack">
-          <option value="1">Single</option><option value="6">6 pack</option>
-          <option value="10">10 pack</option><option value="24">24 block</option>
-          <option value="30" selected>30 block</option>
+          <option value="30">30 block</option>
         </select>
       </div>
       <div>
         <label for="addPrice">Price ($)</label>
-        <input id="addPrice" type="number" inputmode="decimal" step="0.01" min="0" placeholder="54.99">
+        <input id="addPrice" type="number" inputmode="decimal" step="0.01" min="0" placeholder="0.00">
       </div>
     </div>
     <label for="addPhoto">Photo of the price tag (optional, gets a ✅)</label>
@@ -127,13 +137,10 @@
       <div><label for="sRadius">Search radius (km)</label><input id="sRadius" type="number" inputmode="decimal" min="1" max="100"></div>
       <div><label for="sFuel">Petrol $ per km</label><input id="sFuel" type="number" inputmode="decimal" step="0.01" min="0"></div>
     </div>
-    <div class="row">
-      <div><label for="sDeal">Buzz me under ($)</label><input id="sDeal" type="number" inputmode="decimal" step="0.01" min="0"></div>
-      <div><label for="sDealPack">for a</label>
-        <select id="sDealPack"><option value="1">Single</option><option value="6">6 pack</option><option value="10">10 pack</option><option value="24">24 block</option><option value="30">30 block</option></select>
-      </div>
-    </div>
+    <p class="note">🔔 Deal alerts are set on each drink: tap ⭐ next to a drink, then set your "buzz me" price.</p>
     <button class="ghost" id="alertsBtn">🔔 Turn on deal alerts</button>
+    <button class="ghost" id="setHome">🏠 Make where I am now my home spot</button>
+    <p class="note">Alerts check shops near your home spot (Jacobs Well until you change it).</p>
     <button class="primary" id="saveSettings">Save</button>
     <button class="ghost" id="signInOut">Sign in</button>
   </div>

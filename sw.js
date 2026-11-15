@@ -1,5 +1,5 @@
 // Bottlo Scout background helper: keeps the app shell handy and shows alerts.
-const CACHE = "bottlo-scout-v2";
+const CACHE = "bottlo-scout-v4";
 const SHELL = ["./", "index.html", "style.css", "app.js", "config.js", "icons/icon-192.png"];
 self.addEventListener("install", e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).catch(() => {})); self.skipWaiting(); });
 self.addEventListener("activate", e => { e.waitUntil(self.clients.claim()); });
@@ -12,7 +12,15 @@ self.addEventListener("fetch", e => {
 });
 // Step 4 (background deal alerts) will send pushes here.
 self.addEventListener("push", e => {
-  const d = e.data ? e.data.json() : { title: "🔔 Bottlo Scout deal!", body: "Open Bottlo Scout to see it." };
-  e.waitUntil(self.registration.showNotification(d.title, { body: d.body, icon: "icons/icon-192.png" }));
+  let d = { title: "🔔 Bottlo Scout deal!", body: "Open Bottlo Scout to see it." };
+  try { if (e.data) d = { ...d, ...e.data.json() }; } catch {}
+  e.waitUntil(self.registration.showNotification(d.title, { body: d.body, icon: "icons/icon-192.png", badge: "icons/icon-192.png", data: { url: d.url || "./" } }));
 });
-self.addEventListener("notificationclick", e => { e.notification.close(); e.waitUntil(self.clients.openWindow("./")); });
+self.addEventListener("notificationclick", e => {
+  e.notification.close();
+  e.waitUntil((async () => {
+    const wins = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+    if (wins[0]) return wins[0].focus();
+    return self.clients.openWindow(e.notification.data?.url || "./");
+  })());
+});

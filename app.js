@@ -1,5 +1,5 @@
 // =====================================================================
-//  BOTTLO SCOUT – VERSION 2 APP
+//  BOTTLO SCOUT – VERSION 3 APP (every drink)
 //  You shouldn't need to change anything in here. Your keys go in config.js.
 // =====================================================================
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
@@ -9,7 +9,16 @@ const $ = id => document.getElementById(id);
 const JACOBS_WELL = { lat: -27.7810, lng: 153.3655 };
 const FADE_DAYS = 7;
 const ROAD_FACTOR = 1.3;              // roads are roughly 30% longer than a straight line
-const PACKS = { 1: "single", 6: "6 pack", 10: "10 pack", 24: "24 block", 30: "30 block" };
+const CATS = [
+  ["beer", "🍺 Beer"], ["cider", "🍏 Cider"], ["premix", "🥤 Premix"], ["rum", "🏴‍☠️ Rum"], ["bourbon", "🥃 Bourbon"],
+  ["whisky", "🥃 Whisky"], ["vodka", "🍸 Vodka"], ["gin", "🍸 Gin"], ["brandy", "🥃 Brandy"], ["redwine", "🍷 Red"], ["whitewine", "🥂 White"],
+  ["fav", "⭐ Mine"],
+];
+const CAT_NOTE = {
+  beer: "🏆 Australia's best-selling beers first (2025 sales data), all as 30 blocks.",
+  fav: "Your ⭐ favourites. Tap ⭐ on any drink to add it here.",
+};
+const PACK_CHOICES = { can: [1, 4, 6, 10, 16, 24, 30], bottle: [1, 6, 12] };
 
 if (!SUPABASE_URL || SUPABASE_URL.includes("PASTE")) {
   document.querySelector(".wrap").innerHTML =
@@ -23,14 +32,21 @@ const S = {
   user: null, profile: null,
   settings: { radius_km: 15, deal_price: 55, deal_pack: 30, fuel_per_km: 0.20 },
   pos: { ...JACOBS_WELL, gps: false },
-  products: [], productId: null, stores: [], rows: [], myVotes: {},
+  products: [], productId: null, category: "beer", favs: new Map(), stores: [], rows: [], myVotes: {},
   dealsSeen: new Set(),
 };
 
 // ---------- little helpers ----------
 const money = n => "$" + Number(n).toFixed(2);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
-const packName = n => PACKS[n] || n + " pack";
+const product = () => S.products.find(p => p.id === S.productId) || { std_pack: 30, unit: "can", short_name: "Super Crisp" };
+const unitName = (p = product()) => p.unit === "bottle" ? "bottle" : "can";
+function packName(n, p = product()) {
+  if (p.unit === "bottle") return n === 1 ? "bottle" : n === 12 ? "dozen" : `${n} bottles`;
+  return ({ 1: "single can", 24: "24 block", 30: "30 block" })[n] || `${n} pack`;
+}
+const stdPack = (p = product()) => Number(p.std_pack || 1);
+const nameOf = p => p.short_name || p.name;
 const local = {
   get(k, d) { try { const v = localStorage.getItem("cf." + k); return v === null ? d : JSON.parse(v); } catch { return d; } },
   set(k, v) { try { localStorage.setItem("cf." + k, JSON.stringify(v)); } catch {} },
@@ -71,25 +87,91 @@ function locate() {
 function useHome() {
   const s = S.settings;
   S.pos = { lat: s.home_lat ?? JACOBS_WELL.lat, lng: s.home_lng ?? JACOBS_WELL.lng, gps: false };
-  $("where").textContent = "🏠 Using home (Jacobs Well). Allow location for live GPS.";
+  $("where").textContent = "🏠 Using your home spot. Allow location for live GPS.";
   render();
 }
 
 // ---------- loading data ----------
 async function loadStatic() {
   const [p, s] = await Promise.all([
-    sb.from("products").select("*").order("id"),
+    sb.from("products").select("*").order("category").order("rank", { nullsFirst: false }).order("id"),
     sb.from("stores").select("*").order("name"),
   ]);
   if (p.error || s.error) { toast("Couldn't reach the Brain. Check your internet."); return; }
   S.products = p.data; S.stores = s.data;
-  S.productId = S.productId ?? local.get("product", S.products[0]?.id);
+  S.productId = S.productId ?? local.get("product", S.products.find(x => x.stockcode === "6076024")?.id ?? S.products[0]?.id);
   if (!S.products.find(x => x.id === S.productId)) S.productId = S.products[0]?.id;
-  const pick = $("productPick");
-  pick.innerHTML = S.products.map(x => `<option value="${x.id}">${esc(x.name)}</option>`).join("");
-  pick.value = S.productId;
-  pick.classList.toggle("hide", S.products.length < 2);
+  S.category = local.get("category", product().category || "beer");
+  renderPicker();
 }
+
+async function loadFavs() {
+  S.favs = new Map();
+  if (!S.user) return;
+  const { data } = await sb.from("favourites").select("product_id,target_price").eq("user_id", S.user.id);
+  (data || []).forEach(f => S.favs.set(f.product_id, f.target_price === null ? null : Number(f.target_price)));
+}
+
+// ---------- 🍺🥃🍷 category chips + drink picker ----------
+function productsIn(cat) {
+  if (cat === "fav") return S.products.filter(p => S.favs.has(p.id));
+  return S.products.filter(p => p.category === cat).sort((a, b) => (a.rank ?? 99) - (b.rank ?? 99));
+}
+function renderPicker() {
+  $("cats").innerHTML = CATS.map(([k, label]) => `<button class="cat ${k === S.category ? "on" : ""}" data-cat="${k}">${label}</button>`).join("");
+  const list = productsIn(S.category);
+  $("catNote").textContent = CAT_NOTE[S.category] || "🔥 Popular picks. Prices from Dan's, BWS and scouts like you.";
+  $("productPick").innerHTML = list.length
+    ? list.map((p, i) => `<option value="${p.id}">${S.category === "fav" ? "⭐" : (p.rank ?? i + 1) + "."} ${esc(nameOf(p))}</option>`).join("")
+    : `<option value="">No favourites yet</option>`;
+  if (list.find(p => p.id === S.productId)) $("productPick").value = S.productId;
+  renderFav();
+}
+function renderFav() {
+  const isFav = S.favs.has(S.productId);
+  $("favBtn").textContent = isFav ? "⭐" : "☆";
+  $("favBox").classList.toggle("hide", !isFav);
+  $("favPack").textContent = packName(stdPack());
+  const t = S.favs.get(S.productId);
+  $("favTarget").value = t ?? "";
+}
+function chooseProduct(id) {
+  if (!id) return;
+  S.productId = id; local.set("product", id);
+  renderFav(); S.rows = []; render(); loadPrices();
+}
+$("cats").addEventListener("click", e => {
+  const b = e.target.closest("[data-cat]"); if (!b) return;
+  S.category = b.dataset.cat; local.set("category", S.category);
+  renderPicker();
+  const list = productsIn(S.category);
+  if (list.length && !list.find(p => p.id === S.productId)) chooseProduct(list[0].id);
+});
+$("favBtn").addEventListener("click", async () => {
+  if (needSignIn()) return;
+  const id = S.productId;
+  if (S.favs.has(id)) {
+    const { error } = await sb.from("favourites").delete().eq("user_id", S.user.id).eq("product_id", id);
+    if (error) return toast("Couldn't update favourites");
+    S.favs.delete(id); toast("Removed from ⭐ favourites");
+  } else {
+    const { error } = await sb.from("favourites").upsert({ user_id: S.user.id, product_id: id, target_price: null });
+    if (error) return toast("Couldn't update favourites");
+    S.favs.set(id, null); toast("⭐ Added! Set a price to get buzzed about deals.");
+  }
+  if (S.category === "fav") renderPicker(); else renderFav();
+  render();
+});
+$("saveFav").addEventListener("click", async () => {
+  if (needSignIn()) return;
+  const v = parseFloat($("favTarget").value);
+  const target = v > 0 ? Math.round(v * 100) / 100 : null;
+  const { error } = await sb.from("favourites").upsert({ user_id: S.user.id, product_id: S.productId, target_price: target });
+  if (error) return toast("Couldn't save");
+  S.favs.set(S.productId, target);
+  toast(target ? `🔔 We'll buzz you when a ${packName(stdPack())} is under ${money(target)}` : "Alert turned off for this drink");
+  render();
+});
 
 async function loadPrices() {
   if (!S.productId) return;
@@ -127,14 +209,15 @@ function boardData() {
     let score = Infinity;
     if (best) {
       score = Number(best.per_unit);
-      if (useFuel) score += (dist * ROAD_FACTOR * 2 * st.fuel_per_km) / st.deal_pack;
+      if (useFuel) score += (dist * ROAD_FACTOR * 2 * st.fuel_per_km) / stdPack();
     }
     return { store: s, dist, best, score };
   }).filter(x => x.dist <= st.radius_km)
     .sort((a, b) => a.score - b.score || a.dist - b.dist);
 }
 const trusted = r => r.source === "robot" || r.source === "photo" || r.ups >= 2;
-const isDeal = r => Number(r.per_unit) * S.settings.deal_pack <= S.settings.deal_price + 0.001;
+const target = () => S.favs.get(S.productId) || 0;
+const isDeal = r => target() > 0 && Number(r.per_unit) * stdPack() <= target() + 0.001;
 const sourceBadge = r => r.source === "robot" ? "🤖 Robot (online price)" : r.source === "photo" ? "📸 " + esc(r.nickname || "someone") : "👤 " + esc(r.nickname || "someone");
 
 // ---------- drawing the screen ----------
@@ -147,12 +230,12 @@ function render() {
   // 🔔 deal banner
   const deals = priced.filter(b => isDeal(b.best));
   $("deal").innerHTML = deals.length ? `<div class="card dealbox"><b>🔔 Deal alert!</b>
-    ${esc(deals[0].store.name)} works out at ${money(deals[0].best.per_unit * st.deal_pack)} for a ${packName(st.deal_pack)}. That's under your ${money(st.deal_price)} target!</div>` : "";
+    ${esc(deals[0].store.name)} works out at ${money(deals[0].best.per_unit * stdPack())} for a ${packName(stdPack())}. That's under your ${money(target())} target!</div>` : "";
   deals.forEach(d => notifyDeal(d));
 
   // 🏆 winner
   if (!priced.length) {
-    $("winner").innerHTML = `<div class="card empty"><b>No prices yet 🍺</b>Be the first! Tap <b>Add a price</b> when you spot it in a bottlo.</div>`;
+    $("winner").innerHTML = `<div class="card empty"><b>No prices yet for ${esc(nameOf(product()))}</b>The 🤖 Robot checks every morning. Or be the first: tap <b>Add a price</b> when you spot it in a bottlo.</div>`;
   } else {
     const w = priced[0], r = w.best;
     const next = priced[1];
@@ -160,13 +243,13 @@ function render() {
     if (w.store.chain !== "Dan Murphy's" && board.some(b => b.store.chain === "Dan Murphy's"))
       tip = `<div class="note" style="color:#2a1d00;opacity:.8;margin-top:12px">💡 Dan Murphy's says it beats a cheaper advertised price on the same product. Show them this price at Dan's.</div>`;
     else if (next)
-      tip = `<div class="note" style="color:#2a1d00;opacity:.8;margin-top:12px">Saves you ${money((next.best.per_unit - r.per_unit) * st.deal_pack)} on a ${packName(st.deal_pack)} compared with ${esc(next.store.name)}.</div>`;
+      tip = `<div class="note" style="color:#2a1d00;opacity:.8;margin-top:12px">Saves you ${money((next.best.per_unit - r.per_unit) * stdPack())} on a ${packName(stdPack())} compared with ${esc(next.store.name)}.</div>`;
     $("winner").innerHTML = `<div class="card winner"><div class="bubbles"></div>
       <div class="tag">🏆 Cheapest near you ${trusted(r) ? "· ✅ trusted" : ""}</div>
       <div class="store">${esc(w.store.name)}</div>
       <div>~${w.dist.toFixed(1)} km away · ${sourceBadge(r)} · ${ago(r.added_at)}</div>
-      <div class="big">${money(r.per_unit)} <small>per can</small></div>
-      <div>${money(r.price)} for a ${packName(r.pack_size)}${r.pack_size !== st.deal_pack ? ` · about ${money(r.per_unit * st.deal_pack)} for a ${packName(st.deal_pack)}` : ""}</div>
+      <div class="big">${money(r.per_unit * stdPack())} <small>${stdPack() === 1 ? "a " + unitName() : "a " + packName(stdPack())}</small></div>
+      <div>${stdPack() > 1 ? money(r.per_unit) + " per " + unitName() + " · " : ""}${r.pack_size !== stdPack() ? `seen as ${money(r.price)} for a ${packName(r.pack_size)}` : esc(nameOf(product()))}</div>
       <div style="margin-top:14px"><a class="btn" href="${mapsLink(w.store)}">📍 Take me there</a></div>${tip}</div>`;
   }
 
@@ -184,7 +267,7 @@ function itemHtml(b, i) {
       <div class="actions"><button class="chip" data-add="${s.id}">＋ Add price</button><a class="chip" href="${mapsLink(s)}">📍 Map</a></div></div>`;
   const mine = S.user && r.added_by === S.user.id;
   const my = S.myVotes[r.id] || 0;
-  const fuelTxt = $("fuel").checked ? ` · ${money(b.score)}/can with petrol` : "";
+  const fuelTxt = $("fuel").checked ? ` · ${money(b.score * stdPack())} with petrol` : "";
   const canDelete = mine || S.profile?.is_admin;
   const canBan = S.profile?.is_admin && !mine && r.added_by;
   return `<div class="item ${i === 0 ? "first" : ""}"><div class="top">
@@ -194,7 +277,7 @@ function itemHtml(b, i) {
         <div class="dt">${money(r.price)} / ${packName(r.pack_size)} · ~${b.dist.toFixed(1)} km${fuelTxt}</div>
         <div class="dt">${sourceBadge(r)} · ${ago(r.added_at)}</div>
       </div>
-      <div class="pr"><b>${money(r.per_unit)}</b><span>per can</span></div></div>
+      <div class="pr"><b>${money(r.per_unit * stdPack())}</b><span>${stdPack() === 1 ? "a " + unitName() : "a " + packName(stdPack())}</span></div></div>
     <div class="actions">
       ${mine ? "" : `<button class="chip ${my === 1 ? "on" : ""}" data-vote="1" data-id="${r.id}">👍 ${r.ups}</button>
       <button class="chip ${my === -1 ? "on" : ""}" data-vote="-1" data-id="${r.id}">👎 ${r.downs}</button>`}
@@ -216,10 +299,11 @@ async function notifyDeal(d) {
   if (seen.includes(key)) return;
   local.set("dealsNotified", [...seen.slice(-50), key]);
   if (!("Notification" in window) || Notification.permission !== "granted") return;
+  if (await alertsOn()) return;      // background alerts will buzz instead, so no double-up
   try {
     const reg = await navigator.serviceWorker?.ready;
     reg?.showNotification("🔔 Bottlo Scout deal!", {
-      body: `${d.store.name}: ${money(d.best.price)} for a ${packName(d.best.pack_size)}`,
+      body: `${d.store.name}: ${nameOf(product())} ${money(d.best.per_unit * stdPack())} a ${packName(stdPack())}`,
       icon: "icons/icon-192.png", tag: "deal-" + key,
     });
   } catch {}
@@ -239,6 +323,8 @@ async function refreshUser() {
   } else {
     S.settings = { ...S.settings, ...local.get("settings", {}) };
   }
+  await loadFavs();
+  if (S.products.length) renderPicker();
   $("signInOut").textContent = S.user ? "Sign out" : "Sign in";
   $("acct").textContent = S.user ? `Signed in as ${S.profile?.nickname || ""} (${S.user.email}) · 🏅 ${S.profile?.points ?? 0} scout points${S.profile?.is_admin ? " · 👑 admin" : ""}${S.profile?.banned ? " · 🚫 blocked from posting" : ""}` : "Not signed in. You can look, but sign in to add prices or vote.";
 }
@@ -288,6 +374,10 @@ function openAdd(storeId) {
   if (needSignIn()) return;
   if (S.profile.banned) return toast("Your account is blocked from posting 🚫");
   fillStoreSelect(storeId);
+  const p = product();
+  $("addWhat").textContent = nameOf(p);
+  $("addPack").innerHTML = PACK_CHOICES[p.unit === "bottle" ? "bottle" : "can"]
+    .map(n => `<option value="${n}" ${n === stdPack() ? "selected" : ""}>${packName(n)}</option>`).join("");
   $("addPrice").value = ""; $("addPhoto").value = "";
   $("newStore").classList.add("hide"); $("weird").classList.add("hide");
   open("sheetAdd");
@@ -298,8 +388,10 @@ $("showNewStore").addEventListener("click", () => $("newStore").classList.toggle
 function looksWeird() {
   const price = parseFloat($("addPrice").value), pack = +$("addPack").value;
   if (!(price > 0)) return false;
+  const ref = Number(product().ref_price) / stdPack();        // a normal price per can/bottle
+  if (!(ref > 0)) return false;
   const per = price / pack;
-  return per < 1.2 || per > 4.5;   // Super Crisp is usually somewhere around $1.50–$3 a can
+  return per < ref * 0.55 || per > ref * 1.7;
 }
 $("addPrice").addEventListener("input", () => $("weird").classList.toggle("hide", !looksWeird()));
 $("addPack").addEventListener("change", () => $("weird").classList.toggle("hide", !looksWeird()));
@@ -348,6 +440,7 @@ $("savePrice").addEventListener("click", async () => {
     close("sheetAdd");
     toast("Shared with everyone! 🍻");
     loadPrices();
+    sb.functions.invoke("robot", { body: { alerts: true } }).catch(() => {});   // buzz anyone this is a deal for
   } catch (e) {
     toast(e.message || "Something went wrong");
   } finally {
@@ -383,21 +476,18 @@ $("list").addEventListener("click", async e => {
 });
 
 // ---------- settings ----------
-const pickSettings = s => ({ radius_km: s.radius_km, deal_price: s.deal_price, deal_pack: s.deal_pack, fuel_per_km: s.fuel_per_km });
+const pickSettings = s => ({ radius_km: s.radius_km, deal_price: s.deal_price, deal_pack: s.deal_pack, fuel_per_km: s.fuel_per_km, ...(s.home_lat != null ? { home_lat: s.home_lat, home_lng: s.home_lng } : {}) });
 $("openSettings").addEventListener("click", () => {
   const s = S.settings;
   $("sNick").value = S.profile?.nickname || ""; $("sNick").disabled = !S.profile;
   $("sRadius").value = s.radius_km; $("sFuel").value = s.fuel_per_km;
-  $("sDeal").value = s.deal_price; $("sDealPack").value = s.deal_pack;
-  $("alertsBtn").textContent = ("Notification" in window && Notification.permission === "granted") ? "🔔 Deal alerts are on" : "🔔 Turn on deal alerts";
+  refreshAlertsBtn();
   open("sheetSettings");
 });
 $("saveSettings").addEventListener("click", async () => {
   const s = S.settings;
   s.radius_km = Math.max(1, +$("sRadius").value || 15);
   s.fuel_per_km = Math.max(0, +$("sFuel").value || 0);
-  s.deal_price = Math.max(0, +$("sDeal").value || 55);
-  s.deal_pack = +$("sDealPack").value;
   local.set("settings", pickSettings(s));
   if (S.user && S.profile) {
     await sb.from("settings").upsert({ user_id: S.user.id, ...pickSettings(s) });
@@ -410,11 +500,54 @@ $("saveSettings").addEventListener("click", async () => {
   }
   close("sheetSettings"); render(); toast("Saved ✓");
 });
+// ---------- 🔔 background deal alerts (web push) ----------
+function b64ToBytes(b64) {
+  const pad = "=".repeat((4 - b64.length % 4) % 4);
+  const raw = atob((b64 + pad).replace(/-/g, "+").replace(/_/g, "/"));
+  return Uint8Array.from(raw, c => c.charCodeAt(0));
+}
+async function alertsOn() {
+  try {
+    const reg = await navigator.serviceWorker?.ready;
+    return !!(await reg?.pushManager?.getSubscription()) && Notification.permission === "granted";
+  } catch { return false; }
+}
+async function refreshAlertsBtn() {
+  $("alertsBtn").textContent = (await alertsOn()) ? "🔔 Deal alerts are on (tap to test)" : "🔔 Turn on deal alerts";
+}
 $("alertsBtn").addEventListener("click", async () => {
-  if (!("Notification" in window)) return toast("On iPhone: add Bottlo Scout to your Home Screen first, then open it from there.");
-  const p = await Notification.requestPermission();
-  toast(p === "granted" ? "Alerts on! 🔔" : "Alerts are off. You can change this in iPhone Settings.");
-  $("alertsBtn").textContent = p === "granted" ? "🔔 Deal alerts are on" : "🔔 Turn on deal alerts";
+  if (needSignIn()) return;
+  if (!("Notification" in window) || !("serviceWorker" in navigator) || !("PushManager" in window))
+    return toast("On iPhone: add Bottlo Scout to your Home Screen first, then open it from there.");
+  if (await alertsOn()) {                         // already on → send a test buzz
+    const { error } = await sb.functions.invoke("robot", { body: { alerts: true } });
+    return toast(error ? "Alerts are on ✅ (no new deals to send right now)" : "Checked for deals 🔔 You'll get a buzz if there's a new one.");
+  }
+  const perm = await Notification.requestPermission();
+  if (perm !== "granted") return toast("Alerts are off. You can change this in iPhone Settings → Notifications.");
+  try {
+    const { data: key, error } = await sb.rpc("vapid_public_key");
+    if (error || !key) throw new Error("Alerts aren't set up yet (Morning checklist step 3).");
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToBytes(key) });
+    const j = sub.toJSON();
+    const { error: e2 } = await sb.from("push_subscriptions").upsert(
+      { user_id: S.user.id, endpoint: j.endpoint, p256dh: j.keys.p256dh, auth: j.keys.auth }, { onConflict: "endpoint" });
+    if (e2) throw e2;
+    toast("Alerts on! 🔔 We'll buzz you when there's a deal.");
+  } catch (e) {
+    toast(e.message || "Couldn't turn on alerts");
+  }
+  refreshAlertsBtn();
+});
+$("setHome").addEventListener("click", () => {
+  if (!navigator.geolocation) return toast("Location isn't available");
+  navigator.geolocation.getCurrentPosition(async p => {
+    S.settings.home_lat = p.coords.latitude; S.settings.home_lng = p.coords.longitude;
+    local.set("settings", pickSettings(S.settings));
+    if (S.user && S.profile) await sb.from("settings").upsert({ user_id: S.user.id, ...pickSettings(S.settings) });
+    toast("Home saved 🏠 Alerts will look around here.");
+  }, () => toast("Allow location first, then try again"), { enableHighAccuracy: true, timeout: 10000 });
 });
 $("signInOut").addEventListener("click", async () => {
   close("sheetSettings");
@@ -422,7 +555,7 @@ $("signInOut").addEventListener("click", async () => {
   else open("sheetSignin");
 });
 $("fuel").addEventListener("change", () => { local.set("fuel", $("fuel").checked); render(); });
-$("productPick").addEventListener("change", e => { S.productId = +e.target.value; local.set("product", S.productId); loadPrices(); });
+$("productPick").addEventListener("change", e => chooseProduct(+e.target.value));
 
 // ---------- age check + install tip ----------
 if (!local.get("age18", false)) open("sheetAge");
@@ -436,8 +569,8 @@ $("hideTip").addEventListener("click", () => { local.set("tipHidden", true); $("
 (async function start() {
   $("fuel").checked = local.get("fuel", false);
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
-  await refreshUser();
   await loadStatic();
+  await refreshUser();
   useHome();          // show something straight away…
   locate();           // …then switch to GPS when it's ready
   await loadPrices();

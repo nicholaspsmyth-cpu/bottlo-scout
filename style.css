@@ -76,3 +76,15 @@ button,a.btn{display:inline-flex;align-items:center;justify-content:center;gap:6
 .toast.show{transform:translateX(-50%) translateY(0)}
 .hide{display:none!important}
 .tagline{color:var(--gold);font-weight:600;font-size:14px;margin:0 0 4px}
+
+.cats{display:flex;gap:8px;overflow-x:auto;padding:2px 0 6px;margin:0 -16px;padding-left:16px;padding-right:16px;scrollbar-width:none}
+.cats::-webkit-scrollbar{display:none}
+.cat{flex:none;background:var(--card);border:1px solid var(--line);color:var(--ink);border-radius:999px;padding:8px 13px;font:600 14px Inter}
+.cat.on{background:var(--gold);color:#2a1d00;border-color:var(--gold)}
+.prodbar{display:flex;gap:8px;align-items:center;margin:4px 0 12px}
+.prodbar select{flex:1}
+.fav{font-size:22px;padding:8px 12px;color:var(--gold)}
+.favbox{margin:-4px 0 12px;padding:12px 14px}
+.favrow{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:14px}
+.favrow input{width:90px;padding:8px 10px}
+#catNote{margin:0 0 6px}
