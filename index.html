@@ -41,7 +41,7 @@
 
   <div class="cats" id="cats"></div>
   <div class="radios hide" id="beerFmt" style="margin:0 0 8px">
-    <button class="chip" data-fmt="can">🥫 Cans · 30 block</button>
+    <button class="chip" data-fmt="can">🥫 Cans</button>
     <button class="chip" data-fmt="bottle">🍾 Stubbies · 24 carton</button>
   </div>
   <p class="note" id="catNote"></p>
@@ -92,6 +92,20 @@
     <input id="password" type="password" autocomplete="current-password" placeholder="••••••••">
     <button class="primary" id="signInBtn">Sign in</button>
     <button class="ghost" id="signUpBtn">Create account</button>
+    <button class="link" id="forgotBtn">Forgot your password?</button>
+  </div>
+</div>
+
+<div class="sheet hide" id="sheetNewPass">
+  <div class="panel">
+    <button class="close" data-close>✕</button>
+    <h3>🔑 New password</h3>
+    <p id="newPassMsg">Pick a new password for your Bottlo Scout account.</p>
+    <label for="newPass">New password (at least 8 characters)</label>
+    <input id="newPass" type="password" autocomplete="new-password" placeholder="••••••••">
+    <label for="newPass2">Type it again</label>
+    <input id="newPass2" type="password" autocomplete="new-password" placeholder="••••••••">
+    <button class="primary" id="saveNewPass">Save new password</button>
   </div>
 </div>
 
@@ -171,6 +185,7 @@
     <button class="ghost" id="alertsBtn">🔔 Turn on deal alerts</button>
     <button class="ghost" id="setHome">🏠 Make where I am now my home spot</button>
     <p class="note">Alerts check shops near your home spot (Jacobs Well until you change it).</p>
+    <button class="ghost hide" id="changePass">🔑 Change my password</button>
     <button class="primary" id="saveSettings">Save</button>
     <button class="ghost" id="signInOut">Sign in</button>
   </div>

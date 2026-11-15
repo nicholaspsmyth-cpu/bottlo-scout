@@ -10,16 +10,17 @@ const JACOBS_WELL = { lat: -27.7810, lng: 153.3655 };
 const FADE_DAYS = 7;
 const ROAD_FACTOR = 1.3;              // roads are roughly 30% longer than a straight line
 const CATS = [
-  ["beer", "🍺 Beer"], ["cider", "🍏 Cider"], ["premix", "🥤 Premix"], ["rum", "🏴‍☠️ Rum"], ["bourbon", "🥃 Bourbon"],
+  ["beer", "🍺 Aussie beer"], ["import", "🌍 Import beer"], ["cider", "🍏 Cider"], ["premix", "🥤 Premix"], ["rum", "🏴‍☠️ Rum"], ["bourbon", "🥃 Bourbon"],
   ["whisky", "🥃 Whisky"], ["vodka", "🍸 Vodka"], ["gin", "🍸 Gin"], ["brandy", "🥃 Brandy"], ["redwine", "🍷 Red"], ["whitewine", "🥂 White"],
   ["fav", "⭐ Mine"],
 ];
 const CAT_NOTE = {
-  beer: "🏆 Australia's best-selling beers first (2025 sales data).",
+  beer: "🏆 Aussie best sellers first (2025 sales data), then popular picks. Swipe for all 20 →",
+  import: "🌍 Popular imports. Lots of these (like Peroni and Asahi) are brewed here under licence.",
   fav: "Your ⭐ favourites. Tap ⭐ on any drink to add it here.",
 };
 const PACK_CHOICES = { can: [1, 4, 6, 10, 16, 24, 30], bottle: [1, 6, 12], stubby: [1, 6, 24] };
-const CAT_EMOJI = { beer: "🍺", cider: "🍏", premix: "🥤", rum: "🏴‍☠️", bourbon: "🥃", whisky: "🥃", vodka: "🍸", gin: "🍸", brandy: "🥃", redwine: "🍷", whitewine: "🥂" };
+const CAT_EMOJI = { beer: "🍺", import: "🍺", cider: "🍏", premix: "🥤", rum: "🏴‍☠️", bourbon: "🥃", whisky: "🥃", vodka: "🍸", gin: "🍸", brandy: "🥃", redwine: "🍷", whitewine: "🥂" };
 const RADII = [5, 10, 15, 25, 50];
 // Scotty lives right inside the app code, so he can never go missing 🤠
 const SCOTTY_SVG = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 512 512\" role=\"img\" aria-label=\"Scotty the Scout\"><circle cx=\"250\" cy=\"300\" r=\"190\" fill=\"#1C6BB5\" opacity=\"0.13\"/>     <g transform=\"translate(246 318) scale(1.42) translate(-203 -180)\">       <!-- shoulders + singlet -->       <path d=\"M100 312 Q110 256 166 248 L240 248 Q296 256 306 312 Z\" fill=\"#e9a97f\"></path>       <path d=\"M150 252 L170 252 Q203 292 236 252 L256 252 Q290 282 294 312 L112 312 Q116 282 150 252 Z\" fill=\"#1C6BB5\"></path>       <g transform=\"translate(203 190) scale(1.18) translate(-203 -190)\">       <!-- mullet (behind the head) -->       <path d=\"M148 196 Q130 258 156 280 Q182 290 203 278 Q224 290 250 280 Q276 258 258 196 Z\" fill=\"#9c4f26\"></path>       <path d=\"M150 238 Q146 266 164 282 M256 238 Q260 266 242 282\" fill=\"none\" stroke=\"#80401c\" stroke-width=\"4\" stroke-linecap=\"round\"></path>       <!-- neck + ears + face -->       <rect x=\"185\" y=\"226\" width=\"36\" height=\"34\" rx=\"8\" fill=\"#d99470\"></rect>       <circle cx=\"141\" cy=\"190\" r=\"15\" fill=\"#e09a74\"></circle>       <circle cx=\"265\" cy=\"190\" r=\"15\" fill=\"#e09a74\"></circle>       <ellipse cx=\"203\" cy=\"186\" rx=\"62\" ry=\"66\" fill=\"#e9a97f\"></ellipse>       <!-- scraggly ginger beard -->       <path d=\"M141 180 Q136 238 150 262 L158 254 L164 274 L174 262 L182 284 L192 268 L203 290 L214 268 L224 284 L232 262 L242 274 L248 254 L256 262 Q270 238 265 180 Q258 210 243 214 Q224 234 203 234 Q182 234 163 214 Q148 210 141 180 Z\" fill=\"#9c4f26\"></path>       <path d=\"M166 246 q5 8 2 16 M203 256 q2 9 -1 18 M240 246 q-5 8 -2 16\" fill=\"none\" stroke=\"#80401c\" stroke-width=\"3.5\" stroke-linecap=\"round\"></path>       <circle cx=\"163\" cy=\"206\" r=\"10\" fill=\"#e0675a\" opacity=\"0.5\"></circle>       <circle cx=\"243\" cy=\"206\" r=\"10\" fill=\"#e0675a\" opacity=\"0.5\"></circle>       <!-- big sunburnt nose -->       <ellipse cx=\"203\" cy=\"200\" rx=\"17\" ry=\"14\" fill=\"#e0675a\"></ellipse>       <ellipse cx=\"197\" cy=\"195\" rx=\"5\" ry=\"3.5\" fill=\"#fff\" opacity=\"0.5\"></ellipse>       <!-- cheeky gap-tooth grin + mo -->       <path d=\"M178 228 Q203 254 228 228 Q203 238 178 228 Z\" fill=\"#fff\" stroke=\"#3a1e10\" stroke-width=\"3\" stroke-linejoin=\"round\"></path>       <rect x=\"200\" y=\"232\" width=\"7\" height=\"10\" rx=\"2\" fill=\"#3a1e10\"></rect>       <path d=\"M170 216 Q188 204 203 214 Q218 204 236 216 Q224 228 203 222 Q182 228 170 216 Z\" fill=\"#80401c\"></path>       <!-- eyebrows (one raised, sussing out a bargain) + wraparound sunnies -->       <path d=\"M156 160 Q176 150 196 156\" fill=\"none\" stroke=\"#80401c\" stroke-width=\"8\" stroke-linecap=\"round\"></path>       <path d=\"M210 146 Q230 132 250 146\" fill=\"none\" stroke=\"#80401c\" stroke-width=\"8\" stroke-linecap=\"round\"></path>       <path d=\"M144 168 Q203 156 262 168 L257 186 Q233 198 211 188 Q203 184 195 188 Q173 198 149 186 Z\" fill=\"#12406E\" stroke=\"#C8321F\" stroke-width=\"3.5\" stroke-linejoin=\"round\"></path>       <path d=\"M158 174 L192 171 M214 171 L248 174\" stroke=\"#9FD0FF\" stroke-width=\"3.5\" stroke-linecap=\"round\" opacity=\"0.85\"></path>       <!-- tilted akubra with corks + a clearance tag he never took off -->       <g transform=\"rotate(-7 203 120)\">         <ellipse cx=\"203\" cy=\"134\" rx=\"112\" ry=\"21\" fill=\"#5c3e22\"></ellipse>         <path d=\"M142 132 Q146 74 203 70 Q260 74 264 132 Z\" fill=\"#7d5733\"></path>         <path d=\"M180 76 Q203 92 226 76\" fill=\"none\" stroke=\"#5c3e22\" stroke-width=\"4\" stroke-linecap=\"round\"></path>         <path d=\"M145 114 L261 114 L263 132 L143 132 Z\" fill=\"#C8321F\"></path>         <path d=\"M112 140 v22 M130 146 v20 M278 146 v20 M296 140 v22\" stroke=\"#3b2a1a\" stroke-width=\"2\"></path>         <rect x=\"108\" y=\"160\" width=\"8\" height=\"13\" rx=\"2\" fill=\"#c98a4b\"></rect>         <rect x=\"126\" y=\"164\" width=\"8\" height=\"13\" rx=\"2\" fill=\"#c98a4b\"></rect>         <rect x=\"274\" y=\"164\" width=\"8\" height=\"13\" rx=\"2\" fill=\"#c98a4b\"></rect>         <rect x=\"292\" y=\"160\" width=\"8\" height=\"13\" rx=\"2\" fill=\"#c98a4b\"></rect>         <path d=\"M150 120 Q120 116 104 98\" fill=\"none\" stroke=\"#f4f1e6\" stroke-width=\"2\"></path>         <g transform=\"rotate(-24 84 92)\">           <path d=\"M62 82 h44 l10 10 l-10 10 h-44 z\" fill=\"#f4f1e6\"></path>           <circle cx=\"106\" cy=\"92\" r=\"3\" fill=\"#12406E\"></circle>           <text x=\"82\" y=\"96\" text-anchor=\"middle\" font-family=\"Inter, sans-serif\" font-weight=\"800\" font-size=\"10\" fill=\"#c0392b\">CLEARANCE</text>         </g>       </g>       </g>     </g>     <!-- magnifier -->     <line x1=\"430\" y1=\"458\" x2=\"398\" y2=\"420\" stroke=\"#6b4a2b\" stroke-width=\"20\" stroke-linecap=\"round\"></line>     <circle cx=\"376\" cy=\"392\" r=\"50\" fill=\"#9FD0FF\" fill-opacity=\"0.35\" stroke=\"#C8321F\" stroke-width=\"12\"></circle>     <text x=\"376\" y=\"412\" text-anchor=\"middle\" font-family=\"Alfa Slab One, Georgia, serif\" font-weight=\"700\" font-size=\"58\" fill=\"#C8321F\">$</text>   </svg>";
@@ -40,7 +41,11 @@ if (!SUPABASE_URL || SUPABASE_URL.includes("PASTE")) {
     `<div class="card empty" style="margin-top:40px"><b>Almost there!</b>Open <code>config.js</code> and paste in your Supabase URL and anon key.</div>`;
   throw new Error("config.js not filled in");
 }
+// Did you just tap a "reset your password" link in an email? (check before Supabase tidies the address bar)
+const FROM_RESET = /type=recovery/.test(location.hash + location.search);
+const LINK_ERROR = (location.hash.match(/error_description=([^&]+)/) || [])[1];
 const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+sb.auth.onAuthStateChange(evt => { if (evt === "PASSWORD_RECOVERY") openNewPass(true); });
 
 // ---------- state ----------
 const S = {
@@ -56,7 +61,8 @@ const S = {
 const money = n => "$" + Number(n).toFixed(2);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 const product = (id = S.productId) => S.products.find(p => p.id === id) || { std_pack: 30, unit: "can", short_name: "Super Crisp" };
-const isStubby = (p = product()) => p.category === "beer" && p.unit === "bottle";
+const BEER_CATS = ["beer", "import"];
+const isStubby = (p = product()) => BEER_CATS.includes(p.category) && p.unit === "bottle";
 const unitName = (p = product()) => isStubby(p) ? "stubby" : p.unit === "bottle" ? "bottle" : "can";
 function packName(n, p = product()) {
   if (isStubby(p)) return ({ 1: "stubby", 6: "6 pack", 24: "24 carton" })[n] || `${n} stubbies`;
@@ -188,7 +194,7 @@ async function loadStatic() {
   if (!S.products.find(x => x.id === S.productId)) S.productId = S.products[0]?.id;
   S.category = local.get("category", product().category || "beer");
   S.scout = local.get("scout", null);
-  S.beerFmt = product().category === "beer" ? product().unit : local.get("beerFmt", "can");
+  S.beerFmt = BEER_CATS.includes(product().category) ? product().unit : local.get("beerFmt", "can");
   renderPicker();
 }
 
@@ -202,12 +208,12 @@ async function loadFavs() {
 // ---------- 🍺🥃🍷 category chips + drink picker ----------
 function productsIn(cat) {
   if (cat === "fav") return S.products.filter(p => S.favs.has(p.id));
-  return S.products.filter(p => p.category === cat && (cat !== "beer" || p.unit === S.beerFmt)).sort((a, b) => (a.rank ?? 99) - (b.rank ?? 99));
+  return S.products.filter(p => p.category === cat && (!BEER_CATS.includes(cat) || p.unit === S.beerFmt)).sort((a, b) => (a.rank ?? 99) - (b.rank ?? 99));
 }
 function renderPicker() {
   $("cats").innerHTML = CATS.map(([k, label]) => `<button class="cat ${k === S.category ? "on" : ""}" data-cat="${k}">${label}</button>`).join("");
   $("catNote").textContent = CAT_NOTE[S.category] || "🔥 Popular picks. Prices from Dan's, BWS and scouts like you. Swipe for more →";
-  $("beerFmt").classList.toggle("hide", S.category !== "beer");
+  $("beerFmt").classList.toggle("hide", !BEER_CATS.includes(S.category));
   $("beerFmt").querySelectorAll("[data-fmt]").forEach(b => b.classList.toggle("on", b.dataset.fmt === S.beerFmt));
   renderDrinks(true);
   renderFav();
@@ -252,7 +258,7 @@ function renderFav() {
 function chooseProduct(id) {
   if (!id) return;
   S.productId = id; local.set("product", id);
-  if (product().category === "beer" && product().unit !== S.beerFmt) { S.beerFmt = product().unit; local.set("beerFmt", S.beerFmt); }
+  if (BEER_CATS.includes(product().category) && product().unit !== S.beerFmt) { S.beerFmt = product().unit; local.set("beerFmt", S.beerFmt); }
   renderFav(); render();
   if (!S.rows.some(r => r.product_id === id)) loadPrices();
 }
@@ -267,9 +273,9 @@ $("cats").addEventListener("click", e => {
 $("beerFmt").addEventListener("click", e => {
   const b = e.target.closest("[data-fmt]"); if (!b || b.dataset.fmt === S.beerFmt) return;
   S.beerFmt = b.dataset.fmt; local.set("beerFmt", S.beerFmt);
-  const list = productsIn("beer");
+  const list = productsIn(S.category);
   // jump to the same beer in the other format if we have it (Super Crisp cans → Super Crisp stubbies)
-  const base = s => nameOf(s).replace(/ (30 block|stubbies)$/, "");
+  const base = s => nameOf(s).replace(/ (\d+ (block|pack)|stubbies)$/, "");
   const twin = list.find(p => base(p) === base(product())) || list[0];
   renderPicker();
   if (twin) chooseProduct(twin.id);
@@ -478,6 +484,7 @@ async function refreshUser() {
   await loadFavs();
   if (S.products.length) renderPicker();
   $("signInOut").textContent = S.user ? "Sign out" : "Sign in";
+  $("changePass").classList.toggle("hide", !S.user);
   $("acct").textContent = S.user ? `Signed in as ${S.profile?.nickname || ""} (${S.user.email}) · 🏅 ${S.profile?.points ?? 0} scout points${S.profile?.is_admin ? " · 👑 admin" : ""}${S.profile?.banned ? " · 🚫 blocked from posting" : ""}` : "Not signed in. You can look, but sign in to add prices or vote.";
 }
 function needSignIn() { if (S.user && S.profile) return false; open(S.user ? "sheetNick" : "sheetSignin"); return true; }
@@ -503,6 +510,39 @@ async function doAuth(mode) {
   if (S.profile) toast("Welcome back, " + S.profile.nickname + "!");
 }
 $("signInBtn").addEventListener("click", () => doAuth("in"));
+
+// ---------- 🔑 forgot / change password ----------
+$("forgotBtn").addEventListener("click", async () => {
+  const email = $("email").value.trim();
+  if (!/^\S+@\S+\.\S+$/.test(email)) return toast("Type your email above first, then tap this again");
+  $("forgotBtn").disabled = true;
+  const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: location.origin + location.pathname });
+  $("forgotBtn").disabled = false;
+  if (error) return toast(/rate|seconds/i.test(error.message) ? "Hang on a minute, then try again ⏳" : error.message);
+  toast("📧 Check your email (and junk folder) for a reset link");
+});
+function openNewPass(fromEmail) {
+  $("newPass").value = ""; $("newPass2").value = "";
+  $("newPassMsg").textContent = fromEmail
+    ? "You came from the reset email 👍 Pick a new password for your Bottlo Scout account."
+    : "Pick a new password for your Bottlo Scout account.";
+  close("sheetSignin"); open("sheetNewPass");
+}
+$("saveNewPass").addEventListener("click", async () => {
+  const a = $("newPass").value, b = $("newPass2").value;
+  if (a.length < 8) return toast("At least 8 characters please");
+  if (a !== b) return toast("Those two don't match. Try again");
+  const btn = $("saveNewPass"); btn.disabled = true;
+  const { error } = await sb.auth.updateUser({ password: a });
+  btn.disabled = false;
+  if (error) return toast(/session|expired|missing/i.test(error.message) ? "That reset link has expired. Ask for a new one." : error.message);
+  close("sheetNewPass");
+  await refreshUser(); render();
+  toast("🔑 Password changed! Use it next time you sign in.");
+  if (FROM_RESET && !(window.matchMedia("(display-mode: standalone)").matches || navigator.standalone))
+    setTimeout(() => toast("📱 Now open Bottlo Scout from your Home Screen and sign in there too"), 2800);
+});
+$("changePass").addEventListener("click", () => { close("sheetSettings"); openNewPass(false); });
 $("signUpBtn").addEventListener("click", () => doAuth("up"));
 $("saveNick").addEventListener("click", async () => {
   const nickname = $("nick").value.trim();
@@ -810,4 +850,6 @@ $("hideTip").addEventListener("click", () => { local.set("tipHidden", true); $("
     .subscribe();
   sb.auth.onAuthStateChange((evt) => { if (evt === "SIGNED_OUT") { S.user = null; S.profile = null; render(); } });
   setInterval(loadPrices, 5 * 60 * 1000);   // backup refresh every 5 minutes
+  if (LINK_ERROR) toast("That email link didn't work (it may have expired). Tap Forgot your password? again.");
+  else if (FROM_RESET && S.user && $("sheetNewPass").classList.contains("hide")) openNewPass(true);
 })();
