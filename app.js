@@ -21,8 +21,12 @@ const CAT_NOTE = {
 const PACK_CHOICES = { can: [1, 4, 6, 10, 16, 24, 30], bottle: [1, 6, 12], stubby: [1, 6, 24] };
 const CAT_EMOJI = { beer: "🍺", cider: "🍏", premix: "🥤", rum: "🏴‍☠️", bourbon: "🥃", whisky: "🥃", vodka: "🍸", gin: "🍸", brandy: "🥃", redwine: "🍷", whitewine: "🥂" };
 const RADII = [5, 10, 15, 25, 50];
-const SCOTTY = `<img class="scotty-sm" src="img/scotty.svg" alt="">`;
-// Chains whose 🤖 Robot price is the same online price at every one of their shops
+// Scotty lives right inside the app code, so he can never go missing 🤠
+const SCOTTY_SVG = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 512 512\" role=\"img\" aria-label=\"Scotty the Scout\"><circle cx=\"250\" cy=\"300\" r=\"190\" fill=\"#1C6BB5\" opacity=\"0.13\"/>     <g transform=\"translate(246 318) scale(1.42) translate(-203 -180)\">       <!-- shoulders + singlet -->       <path d=\"M100 312 Q110 256 166 248 L240 248 Q296 256 306 312 Z\" fill=\"#e9a97f\"></path>       <path d=\"M150 252 L170 252 Q203 292 236 252 L256 252 Q290 282 294 312 L112 312 Q116 282 150 252 Z\" fill=\"#1C6BB5\"></path>       <g transform=\"translate(203 190) scale(1.18) translate(-203 -190)\">       <!-- mullet (behind the head) -->       <path d=\"M148 196 Q130 258 156 280 Q182 290 203 278 Q224 290 250 280 Q276 258 258 196 Z\" fill=\"#9c4f26\"></path>       <path d=\"M150 238 Q146 266 164 282 M256 238 Q260 266 242 282\" fill=\"none\" stroke=\"#80401c\" stroke-width=\"4\" stroke-linecap=\"round\"></path>       <!-- neck + ears + face -->       <rect x=\"185\" y=\"226\" width=\"36\" height=\"34\" rx=\"8\" fill=\"#d99470\"></rect>       <circle cx=\"141\" cy=\"190\" r=\"15\" fill=\"#e09a74\"></circle>       <circle cx=\"265\" cy=\"190\" r=\"15\" fill=\"#e09a74\"></circle>       <ellipse cx=\"203\" cy=\"186\" rx=\"62\" ry=\"66\" fill=\"#e9a97f\"></ellipse>       <!-- scraggly ginger beard -->       <path d=\"M141 180 Q136 238 150 262 L158 254 L164 274 L174 262 L182 284 L192 268 L203 290 L214 268 L224 284 L232 262 L242 274 L248 254 L256 262 Q270 238 265 180 Q258 210 243 214 Q224 234 203 234 Q182 234 163 214 Q148 210 141 180 Z\" fill=\"#9c4f26\"></path>       <path d=\"M166 246 q5 8 2 16 M203 256 q2 9 -1 18 M240 246 q-5 8 -2 16\" fill=\"none\" stroke=\"#80401c\" stroke-width=\"3.5\" stroke-linecap=\"round\"></path>       <circle cx=\"163\" cy=\"206\" r=\"10\" fill=\"#e0675a\" opacity=\"0.5\"></circle>       <circle cx=\"243\" cy=\"206\" r=\"10\" fill=\"#e0675a\" opacity=\"0.5\"></circle>       <!-- big sunburnt nose -->       <ellipse cx=\"203\" cy=\"200\" rx=\"17\" ry=\"14\" fill=\"#e0675a\"></ellipse>       <ellipse cx=\"197\" cy=\"195\" rx=\"5\" ry=\"3.5\" fill=\"#fff\" opacity=\"0.5\"></ellipse>       <!-- cheeky gap-tooth grin + mo -->       <path d=\"M178 228 Q203 254 228 228 Q203 238 178 228 Z\" fill=\"#fff\" stroke=\"#3a1e10\" stroke-width=\"3\" stroke-linejoin=\"round\"></path>       <rect x=\"200\" y=\"232\" width=\"7\" height=\"10\" rx=\"2\" fill=\"#3a1e10\"></rect>       <path d=\"M170 216 Q188 204 203 214 Q218 204 236 216 Q224 228 203 222 Q182 228 170 216 Z\" fill=\"#80401c\"></path>       <!-- eyebrows (one raised, sussing out a bargain) + wraparound sunnies -->       <path d=\"M156 160 Q176 150 196 156\" fill=\"none\" stroke=\"#80401c\" stroke-width=\"8\" stroke-linecap=\"round\"></path>       <path d=\"M210 146 Q230 132 250 146\" fill=\"none\" stroke=\"#80401c\" stroke-width=\"8\" stroke-linecap=\"round\"></path>       <path d=\"M144 168 Q203 156 262 168 L257 186 Q233 198 211 188 Q203 184 195 188 Q173 198 149 186 Z\" fill=\"#12406E\" stroke=\"#C8321F\" stroke-width=\"3.5\" stroke-linejoin=\"round\"></path>       <path d=\"M158 174 L192 171 M214 171 L248 174\" stroke=\"#9FD0FF\" stroke-width=\"3.5\" stroke-linecap=\"round\" opacity=\"0.85\"></path>       <!-- tilted akubra with corks + a clearance tag he never took off -->       <g transform=\"rotate(-7 203 120)\">         <ellipse cx=\"203\" cy=\"134\" rx=\"112\" ry=\"21\" fill=\"#5c3e22\"></ellipse>         <path d=\"M142 132 Q146 74 203 70 Q260 74 264 132 Z\" fill=\"#7d5733\"></path>         <path d=\"M180 76 Q203 92 226 76\" fill=\"none\" stroke=\"#5c3e22\" stroke-width=\"4\" stroke-linecap=\"round\"></path>         <path d=\"M145 114 L261 114 L263 132 L143 132 Z\" fill=\"#C8321F\"></path>         <path d=\"M112 140 v22 M130 146 v20 M278 146 v20 M296 140 v22\" stroke=\"#3b2a1a\" stroke-width=\"2\"></path>         <rect x=\"108\" y=\"160\" width=\"8\" height=\"13\" rx=\"2\" fill=\"#c98a4b\"></rect>         <rect x=\"126\" y=\"164\" width=\"8\" height=\"13\" rx=\"2\" fill=\"#c98a4b\"></rect>         <rect x=\"274\" y=\"164\" width=\"8\" height=\"13\" rx=\"2\" fill=\"#c98a4b\"></rect>         <rect x=\"292\" y=\"160\" width=\"8\" height=\"13\" rx=\"2\" fill=\"#c98a4b\"></rect>         <path d=\"M150 120 Q120 116 104 98\" fill=\"none\" stroke=\"#f4f1e6\" stroke-width=\"2\"></path>         <g transform=\"rotate(-24 84 92)\">           <path d=\"M62 82 h44 l10 10 l-10 10 h-44 z\" fill=\"#f4f1e6\"></path>           <circle cx=\"106\" cy=\"92\" r=\"3\" fill=\"#12406E\"></circle>           <text x=\"82\" y=\"96\" text-anchor=\"middle\" font-family=\"Inter, sans-serif\" font-weight=\"800\" font-size=\"10\" fill=\"#c0392b\">CLEARANCE</text>         </g>       </g>       </g>     </g>     <!-- magnifier -->     <line x1=\"430\" y1=\"458\" x2=\"398\" y2=\"420\" stroke=\"#6b4a2b\" stroke-width=\"20\" stroke-linecap=\"round\"></line>     <circle cx=\"376\" cy=\"392\" r=\"50\" fill=\"#9FD0FF\" fill-opacity=\"0.35\" stroke=\"#C8321F\" stroke-width=\"12\"></circle>     <text x=\"376\" y=\"412\" text-anchor=\"middle\" font-family=\"Alfa Slab One, Georgia, serif\" font-weight=\"700\" font-size=\"58\" fill=\"#C8321F\">$</text>   </svg>";
+const SCOTTY_SRC = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(SCOTTY_SVG);
+const SCOTTY = `<img class="scotty-sm" src="${SCOTTY_SRC}" alt="Scotty the Scout">`;
+document.querySelector(".logo")?.setAttribute("src", SCOTTY_SRC);
+// Chains whose 📋 Scout Report price is the same online price at every one of their shops
 const ONLINE_CHAINS = ["Dan Murphy's", "BWS"];
 const CHAINS = [[/dan murphy/i, "Dan Murphy's"], [/\bbws\b/i, "BWS"], [/liquorland/i, "Liquorland"], [/liquor legends/i, "Liquor Legends"],
   [/cellarbrations/i, "Cellarbrations"], [/bottlemart/i, "Bottlemart"], [/first choice/i, "First Choice Liquor"], [/super cellars/i, "Super Cellars"],
@@ -333,7 +337,7 @@ function boardData(pid = S.productId) {
   for (const r of latest.values()) {
     const cur = byStore.get(r.store_id);
     if (!cur || r.per_unit < cur.per_unit) byStore.set(r.store_id, r);
-    // 🤖 Dan's and BWS online prices are the same at every one of their shops
+    // 📋 Dan's and BWS online prices are the same at every one of their shops
     const ch = chainOfStore.get(r.store_id);
     if (r.source === "robot" && ONLINE_CHAINS.includes(ch)) {
       const c = byChain.get(ch);
@@ -356,7 +360,7 @@ function boardData(pid = S.productId) {
 const trusted = r => r.source === "robot" || r.source === "photo" || r.ups >= 2;
 const target = () => S.favs.get(S.productId) || 0;
 const isDeal = r => target() > 0 && Number(r.per_unit) * stdPack() <= target() + 0.001;
-const sourceBadge = r => r.viaChain ? "🤖 Online price (in-store can differ by state)" : r.source === "robot" ? "🤖 Robot (online price)" : r.source === "photo" ? "📸 " + esc(r.nickname || "someone") : "👤 " + esc(r.nickname || "someone");
+const sourceBadge = r => r.viaChain ? "📋 Scout Report · online price (in-store can differ by state)" : r.source === "robot" ? "📋 Scout Report (online price)" : r.source === "photo" ? "📸 " + esc(r.nickname || "someone") : "👤 " + esc(r.nickname || "someone");
 
 // ---------- drawing the screen ----------
 function render() {
@@ -375,7 +379,7 @@ function render() {
 
   // 🏆 winner
   if (!priced.length) {
-    $("winner").innerHTML = `<div class="card empty">${SCOTTY}<b>No prices yet for ${esc(nameOf(product()))}</b>Scotty's still sussing this one out. The 🤖 Robot checks every morning, or be the first: tap <b>Add a price</b> when you spot it in a bottlo.</div>`;
+    $("winner").innerHTML = `<div class="card empty">${SCOTTY}<b>No prices yet for ${esc(nameOf(product()))}</b>Scotty's still sussing this one out. 📋 The Scout Report checks Dan's and BWS every morning, or be the first: tap <b>Add a price</b> when you spot it in a bottlo.</div>`;
   } else {
     const w = priced[0], r = w.best;
     const next = priced[1];
@@ -384,7 +388,7 @@ function render() {
       tip = `<div class="tipline">💡 Dan Murphy's says it beats a cheaper advertised price on the same product. Show them this price at Dan's.</div>`;
     else if (next)
       tip = `<div class="tipline">💰 Saves you ${money((next.best.per_unit - r.per_unit) * stdPack())} on a ${packName(stdPack())} compared with ${esc(next.store.name)}.</div>`;
-    $("winner").innerHTML = `<div class="card winner">
+    $("winner").innerHTML = `<div class="card winner"><img class="scotty-pick" src="${SCOTTY_SRC}" alt="Scotty's pick">
       <div class="tag">🏆 Cheapest ${S.scout && !S.scout.home ? "around " + esc(S.scout.name) : "near you"} ${trusted(r) ? "· ✅ trusted" : ""}</div>
       <div class="store">${esc(w.store.name)}</div>
       <div class="meta">~${w.dist.toFixed(1)} km away · ${sourceBadge(r)} · ${ago(r.added_at)}</div>
@@ -410,7 +414,7 @@ function itemHtml(b, i) {
       <div class="actions">${addBtn}<a class="chip" href="${mapsLink(s)}">📍 Map</a></div></div>`;
   if (!r) return `<div class="item noprice"><div class="top">
       <div class="rank">–</div>
-      <div class="mid"><div class="nm">${esc(s.name)}</div><div class="dt">~${b.dist.toFixed(1)} km · no price yet${s.robot_readable ? " · 🤖 Robot will check" : ""}</div></div>
+      <div class="mid"><div class="nm">${esc(s.name)}</div><div class="dt">~${b.dist.toFixed(1)} km · no price yet${s.robot_readable ? " · 📋 on the Scout Report" : ""}</div></div>
       <div class="pr"><b>?</b></div></div>
       <div class="actions">${addBtn}<a class="chip" href="${mapsLink(s)}">📍 Map</a></div></div>`;
   const mine = S.user && r.added_by === S.user.id;
